@@ -531,7 +531,7 @@ export default function Home() {
         <h1>
           <span className="hero-heading-line">Discover</span><br />
           <span className="hero-heading-line">Style That</span><br />
-          <span className="hero-heading-line">Defines You <span className="hero-brand-name">With Virtuous Matess</span></span>
+          <span className="hero-heading-line">Defines You <span className="hero-brand-name">With Virtuous Matess Ventures</span></span>
         </h1>
         <p className="hero-text">Elevate your style with our curated collection of premium essentials. Thoughtful picks, unmatched quality.</p>
         <div className="hero-actions">
