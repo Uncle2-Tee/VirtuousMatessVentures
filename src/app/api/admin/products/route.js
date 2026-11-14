@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { ADMIN_SESSION_COOKIE, hasValidAdminSession } from "../../../../lib/admin-auth";
-import { mergeProductCategories, productCategories } from "../../../../lib/catalog";
+import { activeProductCategories, productCategories } from "../../../../lib/catalog";
 import { prisma } from "../../../../lib/prisma";
 import { productFromDatabaseRow, productToDatabaseRow, validProduct } from "../../../../lib/products";
 
@@ -10,6 +10,16 @@ export const runtime = "nodejs";
 async function requireAdmin() {
   const cookieStore = await cookies();
   return hasValidAdminSession(cookieStore.get(ADMIN_SESSION_COOKIE)?.value);
+}
+
+async function isActiveCategory(name) {
+  const normalizedName = name.trim().replace(/\s+/g, " ").toLowerCase();
+  const savedCategory = await prisma.productCategory.findUnique({
+    where: { normalizedName },
+    select: { isActive: true },
+  });
+  if (savedCategory) return savedCategory.isActive;
+  return productCategories.some((category) => category.toLowerCase() === normalizedName);
 }
 
 function databaseUnavailable() {
@@ -22,15 +32,14 @@ export async function GET() {
   try {
     const [products, savedCategories] = await Promise.all([
       prisma.product.findMany({ orderBy: { sortOrder: "asc" } }),
-      prisma.productCategory.findMany({ orderBy: { createdAt: "asc" }, select: { name: true } }),
+      prisma.productCategory.findMany({
+        orderBy: { createdAt: "asc" },
+        select: { name: true, normalizedName: true, isActive: true },
+      }),
     ]);
     return NextResponse.json({
       products: products.map(productFromDatabaseRow),
-      categories: mergeProductCategories(
-        productCategories,
-        savedCategories.map((category) => category.name),
-        products.map((product) => product.category),
-      ),
+      categories: activeProductCategories(savedCategories, products.map((product) => product.category)),
     });
   } catch (error) {
     console.error("Admin could not read product catalogue:", error);
@@ -50,6 +59,9 @@ export async function POST(request) {
   if (!validProduct(product)) return NextResponse.json({ error: "Complete all required product fields with a valid price." }, { status: 400 });
 
   try {
+    if (!(await isActiveCategory(product.category))) {
+      return NextResponse.json({ error: "Choose an active product category." }, { status: 400 });
+    }
     const first = await prisma.product.findFirst({ orderBy: { sortOrder: "asc" }, select: { sortOrder: true } });
     const data = productToDatabaseRow({ ...product, sortOrder: (first?.sortOrder ?? 0) - 1 });
     const saved = await prisma.product.create({ data });
@@ -85,11 +97,23 @@ export async function PATCH(request) {
     if (!Number.isFinite(price) || price <= 0) return NextResponse.json({ error: "Price must be greater than zero." }, { status: 400 });
     update.price = price;
   }
+  if (Object.hasOwn(changes, "category")) {
+    if (typeof changes.category !== "string" || !changes.category.trim() || changes.category.trim().length > 50) {
+      return NextResponse.json({ error: "Product category must be between 1 and 50 characters." }, { status: 400 });
+    }
+    if (changes.category.trim().toLowerCase() === "all") {
+      return NextResponse.json({ error: "\"All\" is reserved for the unfiltered category view." }, { status: 400 });
+    }
+    update.category = changes.category.trim().replace(/\s+/g, " ");
+    if (!(await isActiveCategory(update.category))) {
+      return NextResponse.json({ error: "Choose an active product category." }, { status: 400 });
+    }
+  }
   if (Object.hasOwn(changes, "cardDescription")) {
     if (typeof changes.cardDescription !== "string") return NextResponse.json({ error: "The featured description must be text." }, { status: 400 });
     update.cardDescription = changes.cardDescription;
   }
-  if (Object.keys(changes).some((key) => key !== "name" && key !== "price" && key !== "cardDescription")) {
+  if (Object.keys(changes).some((key) => key !== "name" && key !== "price" && key !== "category" && key !== "cardDescription")) {
     return NextResponse.json({ error: "Unsupported product fields." }, { status: 400 });
   }
 

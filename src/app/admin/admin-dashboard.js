@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import LockResetIcon from "@mui/icons-material/LockReset";
 import CloseIcon from "@mui/icons-material/Close";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlineOutlined";
 import VisibilityIcon from "@mui/icons-material/VisibilityOutlined";
 import VisibilityOffIcon from "@mui/icons-material/VisibilityOffOutlined";
 import { defaultProductCaution, defaultProductUsage, mergeProductCategories, productCategories } from "../../lib/catalog";
@@ -53,6 +54,11 @@ export default function AdminDashboard({ username }) {
   const [form, setForm] = useState(emptyForm);
   const [categoryDraft, setCategoryDraft] = useState("");
   const [categorySaving, setCategorySaving] = useState(false);
+  const [categoryRemoving, setCategoryRemoving] = useState("");
+  const [categoryRemoval, setCategoryRemoval] = useState(null);
+  const [productCategoryDrafts, setProductCategoryDrafts] = useState({});
+  const [catalogueRetryKey, setCatalogueRetryKey] = useState(0);
+  const [catalogueLoading, setCatalogueLoading] = useState(true);
   const [nameDrafts, setNameDrafts] = useState({});
   const [priceDrafts, setPriceDrafts] = useState({});
   const [savingProductIds, setSavingProductIds] = useState({});
@@ -81,18 +87,28 @@ export default function AdminDashboard({ username }) {
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/admin/products")
+    fetch("/api/admin/products", { cache: "no-store" })
       .then(readApiResponse)
       .then(({ products: saved, categories: savedCategories }) => {
         if (cancelled) return;
         if (!Array.isArray(savedCategories)) throw new Error("The product categories response is invalid.");
+        const availableCategories = mergeProductCategories(productCategories, savedCategories);
         setProducts(saved);
-        setCategories(mergeProductCategories(productCategories, savedCategories));
+        setCategories(availableCategories);
+        setForm((current) => availableCategories.some((category) => category.toLowerCase() === current.category.toLowerCase())
+          ? current
+          : { ...current, category: availableCategories[0] || "" });
         setDatabaseReady(true);
       })
-      .catch((error) => { if (!cancelled) setMessage(error.message); });
+      .catch((error) => {
+        if (!cancelled) {
+          setDatabaseReady(false);
+          setMessage(error.message);
+        }
+      })
+      .finally(() => { if (!cancelled) setCatalogueLoading(false); });
     return () => { cancelled = true; };
-  }, []);
+  }, [catalogueRetryKey]);
 
   useEffect(() => {
     let cancelled = false;
@@ -218,6 +234,63 @@ export default function AdminDashboard({ username }) {
     finally { setCategorySaving(false); }
   }
 
+  function requestCategoryRemoval(categoryName) {
+    if (!databaseReady || categorySaving || categoryRemoving) return;
+    const categoryKey = categoryName.toLowerCase();
+    const destinations = categories.filter((category) => category.toLowerCase() !== categoryKey);
+    const productCount = products.filter((product) => product.category.toLowerCase() === categoryKey).length;
+    if (productCount > 0 && destinations.length === 0) {
+      setMessage("Add another category before removing this one so its products have a destination.");
+      return;
+    }
+    setCategoryRemoval({ name: categoryName, replacementCategory: destinations[0] || "" });
+  }
+
+  async function removeCategory() {
+    if (!categoryRemoval || !databaseReady || categorySaving || categoryRemoving) return;
+    const { name, replacementCategory } = categoryRemoval;
+    const categoryKey = name.toLowerCase();
+    const productsToMove = products.filter((product) => product.category.toLowerCase() === categoryKey);
+    if (productsToMove.length > 0 && !replacementCategory) {
+      setMessage("Choose a destination category for the products.");
+      return;
+    }
+
+    setCategoryRemoving(name);
+    try {
+      const { category, movedProducts = 0, replacementCategory: destinationName } = await readApiResponse(await fetch("/api/admin/categories", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name,
+          ...(productsToMove.length > 0 ? { replacementCategory } : {}),
+        }),
+      }));
+      setCategories((current) => current.filter((name) => name.toLowerCase() !== category.toLowerCase()));
+      const remainingCategories = categories.filter((name) => name.toLowerCase() !== category.toLowerCase());
+      const nextFormCategory = destinationName || remainingCategories[0] || "";
+      setProducts((current) => current.map((product) =>
+        destinationName && product.category.toLowerCase() === category.toLowerCase()
+          ? { ...product, category: destinationName }
+          : product));
+      setForm((current) => current.category.toLowerCase() === category.toLowerCase()
+        ? { ...current, category: nextFormCategory }
+        : current);
+      setProductCategoryDrafts((current) => {
+        const next = { ...current };
+        for (const product of productsToMove) delete next[product.id];
+        for (const [productId, draft] of Object.entries(next)) {
+          if (draft.toLowerCase() === category.toLowerCase()) delete next[productId];
+        }
+        return next;
+      });
+      setCategoryRemoval(null);
+      notifyProductCatalogUpdate();
+      setMessage(`${category} has been removed.${movedProducts > 0 ? ` ${movedProducts} ${movedProducts === 1 ? "product was" : "products were"} moved to ${destinationName}.` : ""}`);
+    } catch (error) { setMessage(error.message); }
+    finally { setCategoryRemoving(""); }
+  }
+
   async function handleImageUpload(event) {
     const file = event.currentTarget.files?.[0];
     if (!file) return;
@@ -243,6 +316,7 @@ export default function AdminDashboard({ username }) {
   async function saveProduct(product) {
     const name = (nameDrafts[product.id] ?? product.name).trim();
     const priceValue = priceDrafts[product.id] ?? String(product.price);
+    const category = productCategoryDrafts[product.id] ?? product.category;
     const price = Number(priceValue);
     if (!name) {
       setMessage("Enter a product name.");
@@ -262,12 +336,13 @@ export default function AdminDashboard({ username }) {
       const { product: saved } = await readApiResponse(await fetch("/api/admin/products", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: product.id, name, price }),
+        body: JSON.stringify({ id: product.id, name, price, ...(category !== product.category ? { category } : {}) }),
       }));
       setProducts((current) => current.map((item) => item.id === product.id ? saved : item));
       notifyProductCatalogUpdate();
       setNameDrafts((current) => { const next = { ...current }; delete next[product.id]; return next; });
       setPriceDrafts((current) => { const next = { ...current }; delete next[product.id]; return next; });
+      setProductCategoryDrafts((current) => { const next = { ...current }; delete next[product.id]; return next; });
       setMessage(`${saved.name} updated.`);
     } catch (error) {
       setMessage(error.message);
@@ -372,6 +447,7 @@ export default function AdminDashboard({ username }) {
     <section className="dashboard-heading"><p className="atelier-kicker">Store administration</p><h1>{greeting}</h1><p>Keep your collection polished, current, and ready to shop.</p></section>
     {message && !databaseReady && <p className="database-warning" role="alert">{message} Check DATABASE_URL in your environment and run `npx prisma db push` if the schema has not been applied.</p>}
     <section className="dashboard-overview-grid" aria-label="Customer activity, payment receipts, new listing, and live catalogue">
+      <div className="dashboard-overview-left">
       <details className="orders-panel admin-dropdown-card">
       <summary className="orders-panel-heading admin-dropdown-summary">
         <span className="orders-panel-heading-copy"><span className="atelier-kicker">Customer activity</span><strong id="orders-heading">Orders <span className="orders-count">{orders.length}</span></strong></span>
@@ -433,32 +509,6 @@ export default function AdminDashboard({ username }) {
           </div>
         </details>
       </section>
-      <section className="catalog-panel">
-        <div className="panel-heading"><div><p className="atelier-kicker">Live catalogue</p><h2>Products</h2></div><span className="product-count">{databaseReady ? `${products.length} live` : "Database unavailable"}</span></div>
-        <form className="category-create-form" onSubmit={addCategory}>
-          <label htmlFor="admin-new-category">Add a category</label>
-          <div className="category-create-controls">
-            <input id="admin-new-category" maxLength={50} required value={categoryDraft} onChange={(event) => setCategoryDraft(event.target.value)} placeholder="e.g. Accessories" />
-            <button type="submit" disabled={!databaseReady || categorySaving}>{categorySaving ? "Adding…" : "Add"}</button>
-          </div>
-          <p>New categories are saved and become available in the product form and storefront filters.</p>
-        </form>
-        <details className="catalog-dropdown">
-          <summary><span>Browse and manage products</span><span className="catalog-dropdown-count">{products.length}</span></summary>
-          <div className="catalog-list">{products.map((product) => <article key={product.id} className="catalog-item">
-            <div className="catalog-item-overview">
-              <span className="catalog-image" style={{ backgroundImage: `url(${product.image})` }} />
-              <div className="catalog-item-details"><h3>{product.name}</h3><p>{product.category} <i>·</i> {product.size}</p></div>
-              <button className="catalog-remove-button" type="button" onClick={() => deleteProduct(product)} aria-label={`Remove ${product.name}`}>Remove</button>
-            </div>
-            <div className="catalog-editors">
-              <div className="catalog-name-editor"><label htmlFor={`name-${product.id}`}>Product name</label><div><input id={`name-${product.id}`} aria-label={`Name for ${product.name}`} maxLength={200} value={nameDrafts[product.id] ?? product.name} onChange={(event) => setNameDrafts((current) => ({ ...current, [product.id]: event.target.value }))} /></div></div>
-              <div className="catalog-price-editor"><label htmlFor={`price-${product.id}`}>Price (GHS)</label><div><input id={`price-${product.id}`} aria-label={`Price for ${product.name} in Ghana cedis`} type="number" min="0.01" step="0.01" required value={priceDrafts[product.id] ?? String(product.price)} onChange={(event) => setPriceDrafts((current) => ({ ...current, [product.id]: event.target.value }))} /></div></div>
-              <button className="catalog-save-button" type="button" onClick={() => saveProduct(product)} disabled={Boolean(savingProductIds[product.id])}>{savingProductIds[product.id] ? "Saving…" : "Save changes"}</button>
-            </div>
-          </article>)}</div>
-        </details>
-      </section>
     <section className="dashboard-grid">
       <form className="catalog-form" onSubmit={addProduct}>
         <details className="listing-dropdown">
@@ -494,6 +544,120 @@ export default function AdminDashboard({ username }) {
         </details>
       </form>
     </section>
+      </div>
+      <section className="catalog-panel">
+        <div className="panel-heading"><div><p className="atelier-kicker">Live catalogue</p><h2>Products</h2></div><span className="product-count">{databaseReady ? `${products.length} live` : "Database unavailable"}</span></div>
+        <form className="category-create-form" onSubmit={addCategory}>
+          <label htmlFor="admin-new-category">Add a category</label>
+          <div className="category-create-controls">
+            <input id="admin-new-category" maxLength={50} required value={categoryDraft} onChange={(event) => setCategoryDraft(event.target.value)} placeholder="e.g. Accessories" />
+            <button type="submit" disabled={!databaseReady || categorySaving || Boolean(categoryRemoving)}>{categorySaving ? "Adding…" : "Add"}</button>
+          </div>
+          <p>Categories appear in product listings and storefront filters. Add a removed category again to restore it.</p>
+        </form>
+        <section className="category-management" aria-labelledby="category-management-heading">
+          <div className="category-management-heading">
+            <div><h3 id="category-management-heading">Manage categories</h3><span className="category-management-count">{categories.length} total</span></div>
+            <p>Remove any category. If it has products, choose where to move them first.</p>
+            {!databaseReady && <button className="category-retry-button" type="button" onClick={() => { setCatalogueLoading(true); setCatalogueRetryKey((current) => current + 1); }} disabled={catalogueLoading}>{catalogueLoading ? "Checking database…" : "Retry connection"}</button>}
+          </div>
+          <ul className="category-management-list">
+            {categories.map((category) => {
+              const categoryKey = category.toLowerCase();
+              const isDefault = productCategories.some((item) => item.toLowerCase() === categoryKey);
+              const productCount = products.filter((product) => product.category.toLowerCase() === categoryKey).length;
+              const isRemoving = categoryRemoving === category;
+              const status = isDefault
+                ? productCount ? `Default · ${productCount} ${productCount === 1 ? "product" : "products"}` : "Default"
+                : productCount ? `${productCount} ${productCount === 1 ? "product" : "products"}` : "Custom";
+              return <li className="category-management-item" key={category}>
+                <div className="category-management-copy">
+                  <span className="category-management-name">{category}</span>
+                  <span className={`category-management-status${isDefault ? " default" : productCount ? " in-use" : ""}`}>{status}</span>
+                </div>
+                <button
+                  className="category-remove-button"
+                  type="button"
+                  onClick={() => requestCategoryRemoval(category)}
+                  disabled={!databaseReady || categorySaving || Boolean(categoryRemoving)}
+                  aria-label={`Remove ${category} category`}
+                  title={productCount ? `Move ${productCount} ${productCount === 1 ? "product" : "products"} and remove ${category}` : `Remove ${category}`}
+                >
+                  {isRemoving ? "…" : <DeleteOutlineIcon fontSize="small" />}
+                </button>
+              </li>;
+            })}
+          </ul>
+        </section>
+        {categoryRemoval && (() => {
+          const categoryKey = categoryRemoval.name.toLowerCase();
+          const productsToMove = products.filter((product) => product.category.toLowerCase() === categoryKey);
+          const destinationCategories = categories.filter((category) => category.toLowerCase() !== categoryKey);
+          return <div className="category-removal-backdrop">
+            <section
+              className="category-removal-dialog"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="category-removal-title"
+              aria-describedby="category-removal-description"
+            >
+              <div className="category-removal-heading">
+                <h3 id="category-removal-title">Remove {categoryRemoval.name}?</h3>
+                <button
+                  type="button"
+                  className="category-removal-close"
+                  aria-label="Close category removal"
+                  onClick={() => setCategoryRemoval(null)}
+                  disabled={Boolean(categoryRemoving)}
+                >×</button>
+              </div>
+              <p id="category-removal-description">
+                {productsToMove.length > 0
+                  ? `${productsToMove.length} ${productsToMove.length === 1 ? "product is" : "products are"} currently in this category. Choose where to move ${productsToMove.length === 1 ? "it" : "them"} before removing the category.`
+                  : "This category has no products and will be removed from the storefront filters."}
+              </p>
+              {productsToMove.length > 0 && <label className="category-removal-label" htmlFor="category-removal-destination">Move products to</label>}
+              {productsToMove.length > 0 && <select
+                id="category-removal-destination"
+                className="category-removal-select"
+                value={categoryRemoval.replacementCategory}
+                onChange={(event) => setCategoryRemoval((current) => current
+                  ? { ...current, replacementCategory: event.target.value }
+                  : current)}
+              >
+                {destinationCategories.map((category) => <option key={category} value={category}>{category}</option>)}
+              </select>}
+              <div className="category-removal-actions">
+                <button type="button" onClick={() => setCategoryRemoval(null)} disabled={Boolean(categoryRemoving)}>Cancel</button>
+                <button
+                  type="button"
+                  className="confirm"
+                  onClick={removeCategory}
+                  disabled={Boolean(categoryRemoving) || (productsToMove.length > 0 && !categoryRemoval.replacementCategory)}
+                >
+                  {categoryRemoving ? "Removing…" : productsToMove.length > 0 ? "Move products & remove" : "Remove category"}
+                </button>
+              </div>
+            </section>
+          </div>;
+        })()}
+        <details className="catalog-dropdown">
+          <summary><span>Browse and manage products</span><span className="catalog-dropdown-count">{products.length}</span></summary>
+          <div className="catalog-list">{products.map((product) => <article key={product.id} className="catalog-item">
+            <div className="catalog-item-overview">
+              <span className="catalog-image" style={{ backgroundImage: `url(${product.image})` }} />
+              <div className="catalog-item-details"><h3>{product.name}</h3><p>{product.category} <i>·</i> {product.size}</p></div>
+              <button className="catalog-remove-button" type="button" onClick={() => deleteProduct(product)} aria-label={`Remove ${product.name}`}>Remove</button>
+            </div>
+            <div className="catalog-editors">
+              <div className="catalog-category-editor"><label htmlFor={`category-${product.id}`}>Category</label><select id={`category-${product.id}`} aria-label={`Category for ${product.name}`} value={productCategoryDrafts[product.id] ?? product.category} onChange={(event) => setProductCategoryDrafts((current) => ({ ...current, [product.id]: event.target.value }))}>{categories.map((category) => <option key={category}>{category}</option>)}</select></div>
+              <div className="catalog-name-editor"><label htmlFor={`name-${product.id}`}>Product name</label><div><input id={`name-${product.id}`} aria-label={`Name for ${product.name}`} maxLength={200} value={nameDrafts[product.id] ?? product.name} onChange={(event) => setNameDrafts((current) => ({ ...current, [product.id]: event.target.value }))} /></div></div>
+              <div className="catalog-price-editor"><label htmlFor={`price-${product.id}`}>Price (GHS)</label><div><input id={`price-${product.id}`} aria-label={`Price for ${product.name} in Ghana cedis`} type="number" min="0.01" step="0.01" required value={priceDrafts[product.id] ?? String(product.price)} onChange={(event) => setPriceDrafts((current) => ({ ...current, [product.id]: event.target.value }))} /></div></div>
+              <button className="catalog-save-button" type="button" onClick={() => saveProduct(product)} disabled={Boolean(savingProductIds[product.id])}>{savingProductIds[product.id] ? "Saving…" : "Save changes"}</button>
+            </div>
+          </article>)}</div>
+        </details>
+      </section>
     </section>
     {message && databaseReady && <div className="admin-toast" role="status">✓ {message}</div>}
   </main>;

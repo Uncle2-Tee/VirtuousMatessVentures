@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { initialProducts, mergeProductCategories, productCategories } from "../../../lib/catalog";
+import { activeProductCategories, initialProducts, productCategories } from "../../../lib/catalog";
 import { isTransientDatabaseError, withDatabaseRetry } from "../../../lib/database-retry";
 import { prisma } from "../../../lib/prisma";
 import { productFromDatabaseRow } from "../../../lib/products";
@@ -11,7 +11,7 @@ async function findCatalogueWithRetry() {
     const products = await prisma.product.findMany({ orderBy: { sortOrder: "asc" } });
     const savedCategories = await prisma.productCategory.findMany({
       orderBy: { createdAt: "asc" },
-      select: { name: true },
+      select: { name: true, normalizedName: true, isActive: true },
     });
     return { products, savedCategories };
   });
@@ -36,11 +36,7 @@ export async function GET() {
     const { products, savedCategories } = await findCatalogueWithRetry();
     return NextResponse.json({
       products: products.map(productFromDatabaseRow),
-      categories: mergeProductCategories(
-        productCategories,
-        savedCategories.map((category) => category.name),
-        products.map((product) => product.category),
-      ),
+      categories: activeProductCategories(savedCategories, products.map((product) => product.category)),
     });
   } catch (error) {
     console.error("Could not read the product catalogue:", error);

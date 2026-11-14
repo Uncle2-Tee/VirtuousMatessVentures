@@ -27,5 +27,17 @@ export function mergeProductCategories(...groups) {
   return [...categories.values()];
 }
 
+export function activeProductCategories(savedCategories = [], ...additionalGroups) {
+  const inactiveNames = new Set(savedCategories
+    .filter((category) => !category.isActive)
+    .map((category) => normalizeProductCategoryName(category.normalizedName || category.name).toLowerCase()));
+  return mergeProductCategories(
+    productCategories.filter((category) => !inactiveNames.has(category.toLowerCase())),
+    savedCategories.filter((category) => category.isActive).map((category) => category.name),
+    ...additionalGroups.map((group) => group.filter((category) =>
+      !inactiveNames.has(normalizeProductCategoryName(category).toLowerCase()))),
+  );
+}
+
 export const defaultProductUsage = "1. Unpack and inspect the item.\n2. Use as directed for its intended purpose.\n3. Follow the care instructions provided.";
 export const defaultProductCaution = "Keep small parts away from children.\nUse only as intended.\nStop using if damaged.";
