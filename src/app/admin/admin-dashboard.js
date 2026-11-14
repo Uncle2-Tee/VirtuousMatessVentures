@@ -60,6 +60,8 @@ export default function AdminDashboard({ username }) {
   const [uploadingImage, setUploadingImage] = useState(false);
   const [databaseReady, setDatabaseReady] = useState(false);
   const [orders, setOrders] = useState([]);
+  const [paymentReceipts, setPaymentReceipts] = useState(null);
+  const [paymentReceiptsError, setPaymentReceiptsError] = useState("");
   const [ordersError, setOrdersError] = useState("");
   const [ordersLoading, setOrdersLoading] = useState(true);
   const [orderMessage, setOrderMessage] = useState("");
@@ -142,6 +144,35 @@ export default function AdminDashboard({ username }) {
     const timer = window.setTimeout(() => setOrderMessage(""), 4000);
     return () => window.clearTimeout(timer);
   }, [orderMessage]);
+
+  useEffect(() => {
+    let cancelled = false;
+    let requestInFlight = false;
+    async function loadPaymentReceipts() {
+      if (requestInFlight) return;
+      requestInFlight = true;
+      try {
+        const { receipts } = await readApiResponse(await fetch("/api/admin/payments", { cache: "no-store" }));
+        if (cancelled) return;
+        if (!Array.isArray(receipts)) throw new Error("The payment receipts response is invalid.");
+        setPaymentReceipts(receipts);
+        setPaymentReceiptsError("");
+      } catch (error) {
+        if (!cancelled) setPaymentReceiptsError(error.message || "Could not load payment receipts.");
+      } finally {
+        requestInFlight = false;
+      }
+    }
+    void loadPaymentReceipts();
+    const interval = window.setInterval(loadPaymentReceipts, 30_000);
+    const onFocus = () => { void loadPaymentReceipts(); };
+    window.addEventListener("focus", onFocus);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, []);
 
   useEffect(() => {
     if (!message || !databaseReady) return;
@@ -340,7 +371,7 @@ export default function AdminDashboard({ username }) {
     </section>}
     <section className="dashboard-heading"><p className="atelier-kicker">Store administration</p><h1>{greeting}</h1><p>Keep your collection polished, current, and ready to shop.</p></section>
     {message && !databaseReady && <p className="database-warning" role="alert">{message} Check DATABASE_URL in your environment and run `npx prisma db push` if the schema has not been applied.</p>}
-    <section className="dashboard-overview-grid" aria-label="Customer activity">
+    <section className="dashboard-overview-grid" aria-label="Customer activity, payment receipts, new listing, and live catalogue">
       <details className="orders-panel admin-dropdown-card">
       <summary className="orders-panel-heading admin-dropdown-summary">
         <span className="orders-panel-heading-copy"><span className="atelier-kicker">Customer activity</span><strong id="orders-heading">Orders <span className="orders-count">{orders.length}</span></strong></span>
@@ -363,7 +394,71 @@ export default function AdminDashboard({ username }) {
       ))}</div>}
       </div>
       </details>
-    </section>
+      <section className="catalog-panel admin-receipts-panel" aria-labelledby="admin-payment-receipts-heading">
+        <details className="admin-receipts-dropdown">
+          <summary className="panel-heading admin-receipts-summary" aria-controls="admin-payment-receipts-content">
+            <span className="admin-receipts-heading-copy"><span className="atelier-kicker">Verified payments</span><span className="admin-receipts-title" id="admin-payment-receipts-heading" role="heading" aria-level="2">Payment receipts</span></span>
+            <span className="admin-receipts-summary-side"><span className="product-count">{paymentReceipts ? `${paymentReceipts.length} receipts` : "Recent payments"}</span><span className="admin-dropdown-chevron" aria-hidden="true">⌄</span></span>
+          </summary>
+          <div className="admin-receipts-content" id="admin-payment-receipts-content">
+        <p className="admin-receipts-intro">Confirmed transactions linked to customer orders.</p>
+        {paymentReceipts === null && !paymentReceiptsError && <p className="orders-empty">Loading payment receipts…</p>}
+        {paymentReceiptsError && <p className="database-warning orders-error" role="alert">{paymentReceiptsError}</p>}
+        {paymentReceipts?.length === 0 && !paymentReceiptsError && <div className="admin-receipts-empty"><strong>No payment receipts yet</strong><span>Verified payments will appear here when they are linked to an order.</span></div>}
+        {paymentReceipts?.length > 0 && <div className="admin-payment-receipt-list">{paymentReceipts.map((receipt) => (
+          <article className="admin-payment-receipt" key={receipt.reference}>
+            <div className="admin-payment-receipt-heading">
+              <div><p>{receipt.customer_name}</p><span>Order #{receipt.order_id.slice(0, 8).toUpperCase()}</span></div>
+              <div className="admin-payment-receipt-total"><strong>{new Intl.NumberFormat("en-GH", { style: "currency", currency: receipt.currency }).format(receipt.amount)}</strong><span>Paid</span></div>
+            </div>
+            {receipt.customer_email && <p className="admin-payment-receipt-email">{receipt.customer_email}</p>}
+            <div className="admin-payment-receipt-meta">
+              <time dateTime={receipt.paid_at}>{new Intl.DateTimeFormat("en-GH", { dateStyle: "medium", timeStyle: "short" }).format(new Date(receipt.paid_at))}</time>
+              <span>Paystack</span>
+            </div>
+            <details className="admin-payment-receipt-details">
+              <summary>Receipt details</summary>
+              <div>
+                {Array.isArray(receipt.items) && receipt.items.length > 0 && <ul className="admin-payment-receipt-items">{receipt.items.map((item, index) => (
+                  <li key={`${receipt.reference}-${item.product_id || item.name || index}`}>
+                    <span>{item.name} × {item.quantity}</span>
+                    <strong>{new Intl.NumberFormat("en-GH", { style: "currency", currency: receipt.currency }).format(Number(item.line_total ?? Number(item.price) * Number(item.quantity)))}</strong>
+                  </li>
+                ))}</ul>}
+                <p><span>Transaction reference</span><code>{receipt.reference}</code></p>
+              </div>
+            </details>
+          </article>
+        ))}</div>}
+          </div>
+        </details>
+      </section>
+      <section className="catalog-panel">
+        <div className="panel-heading"><div><p className="atelier-kicker">Live catalogue</p><h2>Products</h2></div><span className="product-count">{databaseReady ? `${products.length} live` : "Database unavailable"}</span></div>
+        <form className="category-create-form" onSubmit={addCategory}>
+          <label htmlFor="admin-new-category">Add a category</label>
+          <div className="category-create-controls">
+            <input id="admin-new-category" maxLength={50} required value={categoryDraft} onChange={(event) => setCategoryDraft(event.target.value)} placeholder="e.g. Accessories" />
+            <button type="submit" disabled={!databaseReady || categorySaving}>{categorySaving ? "Adding…" : "Add"}</button>
+          </div>
+          <p>New categories are saved and become available in the product form and storefront filters.</p>
+        </form>
+        <details className="catalog-dropdown">
+          <summary><span>Browse and manage products</span><span className="catalog-dropdown-count">{products.length}</span></summary>
+          <div className="catalog-list">{products.map((product) => <article key={product.id} className="catalog-item">
+            <div className="catalog-item-overview">
+              <span className="catalog-image" style={{ backgroundImage: `url(${product.image})` }} />
+              <div className="catalog-item-details"><h3>{product.name}</h3><p>{product.category} <i>·</i> {product.size}</p></div>
+              <button className="catalog-remove-button" type="button" onClick={() => deleteProduct(product)} aria-label={`Remove ${product.name}`}>Remove</button>
+            </div>
+            <div className="catalog-editors">
+              <div className="catalog-name-editor"><label htmlFor={`name-${product.id}`}>Product name</label><div><input id={`name-${product.id}`} aria-label={`Name for ${product.name}`} maxLength={200} value={nameDrafts[product.id] ?? product.name} onChange={(event) => setNameDrafts((current) => ({ ...current, [product.id]: event.target.value }))} /></div></div>
+              <div className="catalog-price-editor"><label htmlFor={`price-${product.id}`}>Price (GHS)</label><div><input id={`price-${product.id}`} aria-label={`Price for ${product.name} in Ghana cedis`} type="number" min="0.01" step="0.01" required value={priceDrafts[product.id] ?? String(product.price)} onChange={(event) => setPriceDrafts((current) => ({ ...current, [product.id]: event.target.value }))} /></div></div>
+              <button className="catalog-save-button" type="button" onClick={() => saveProduct(product)} disabled={Boolean(savingProductIds[product.id])}>{savingProductIds[product.id] ? "Saving…" : "Save changes"}</button>
+            </div>
+          </article>)}</div>
+        </details>
+      </section>
     <section className="dashboard-grid">
       <form className="catalog-form" onSubmit={addProduct}>
         <details className="listing-dropdown">
@@ -398,32 +493,7 @@ export default function AdminDashboard({ username }) {
           </div>
         </details>
       </form>
-      <section className="catalog-panel">
-        <div className="panel-heading"><div><p className="atelier-kicker">Live catalogue</p><h2>Products</h2></div><span className="product-count">{databaseReady ? `${products.length} live` : "Database unavailable"}</span></div>
-        <form className="category-create-form" onSubmit={addCategory}>
-          <label htmlFor="admin-new-category">Add a category</label>
-          <div className="category-create-controls">
-            <input id="admin-new-category" maxLength={50} required value={categoryDraft} onChange={(event) => setCategoryDraft(event.target.value)} placeholder="e.g. Accessories" />
-            <button type="submit" disabled={!databaseReady || categorySaving}>{categorySaving ? "Adding…" : "Add"}</button>
-          </div>
-          <p>New categories are saved and become available in the product form and storefront filters.</p>
-        </form>
-        <details className="catalog-dropdown">
-          <summary><span>Browse and manage products</span><span className="catalog-dropdown-count">{products.length}</span></summary>
-          <div className="catalog-list">{products.map((product) => <article key={product.id} className="catalog-item">
-            <div className="catalog-item-overview">
-              <span className="catalog-image" style={{ backgroundImage: `url(${product.image})` }} />
-              <div className="catalog-item-details"><h3>{product.name}</h3><p>{product.category} <i>·</i> {product.size}</p></div>
-              <button className="catalog-remove-button" type="button" onClick={() => deleteProduct(product)} aria-label={`Remove ${product.name}`}>Remove</button>
-            </div>
-            <div className="catalog-editors">
-              <div className="catalog-name-editor"><label htmlFor={`name-${product.id}`}>Product name</label><div><input id={`name-${product.id}`} aria-label={`Name for ${product.name}`} maxLength={200} value={nameDrafts[product.id] ?? product.name} onChange={(event) => setNameDrafts((current) => ({ ...current, [product.id]: event.target.value }))} /></div></div>
-              <div className="catalog-price-editor"><label htmlFor={`price-${product.id}`}>Price (GHS)</label><div><input id={`price-${product.id}`} aria-label={`Price for ${product.name} in Ghana cedis`} type="number" min="0.01" step="0.01" required value={priceDrafts[product.id] ?? String(product.price)} onChange={(event) => setPriceDrafts((current) => ({ ...current, [product.id]: event.target.value }))} /></div></div>
-              <button className="catalog-save-button" type="button" onClick={() => saveProduct(product)} disabled={Boolean(savingProductIds[product.id])}>{savingProductIds[product.id] ? "Saving…" : "Save changes"}</button>
-            </div>
-          </article>)}</div>
-        </details>
-      </section>
+    </section>
     </section>
     {message && databaseReady && <div className="admin-toast" role="status">✓ {message}</div>}
   </main>;

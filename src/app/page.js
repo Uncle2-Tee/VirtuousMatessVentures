@@ -76,7 +76,6 @@ export default function Home() {
   const [mobileAccountSectionOpen, setMobileAccountSectionOpen] = useState(false);
   const [customerSession, setCustomerSession] = useState(null);
   const [authChecked, setAuthChecked] = useState(false);
-  const [authCheckError, setAuthCheckError] = useState("");
   const [ordersVersion, setOrdersVersion] = useState(0);
   const [productDetail, setProductDetail] = useState(null);
   const [showCheckout, setShowCheckout] = useState(false);
@@ -257,18 +256,16 @@ export default function Home() {
     getCustomerSession().then((session) => {
       if (!mounted || receivedAuthEvent) return;
       setCustomerSession(session);
-      setAuthCheckError("");
       setAuthChecked(true);
     }).catch((error) => {
       if (!mounted || receivedAuthEvent) return;
       console.error("Could not load the customer session:", error);
-      setAuthCheckError(error.message || "Could not check your sign-in session.");
+      setCustomerSession(null);
       setAuthChecked(true);
     });
     const unsubscribe = subscribeToCustomerSession((session) => {
       receivedAuthEvent = true;
       setCustomerSession(session);
-      setAuthCheckError("");
       setAuthChecked(true);
     });
     return () => {
@@ -278,12 +275,10 @@ export default function Home() {
   }, []);
   const retryCustomerSessionCheck = useCallback(async () => {
     setAuthChecked(false);
-    setAuthCheckError("");
     try {
       setCustomerSession(await getCustomerSession());
     } catch (error) {
       console.error("Could not restore the customer session:", error);
-      setAuthCheckError(error.message || "Could not check your sign-in session.");
     } finally {
       setAuthChecked(true);
     }
@@ -500,7 +495,7 @@ export default function Home() {
     }
   };
 
-  const customerAccount = <CustomerAccount key={customerSession?.user?.id || "signed-out"} session={customerSession} authChecked={authChecked} authCheckError={authCheckError} onRetrySessionCheck={retryCustomerSessionCheck} onSignInSuccess={handleSignInSuccess} onAccountUpdated={handleAccountUpdated} activeSection={activeAccountSection} onSelectSection={selectAccountSection} onBackToSections={() => setMobileAccountSectionOpen(false)} mobileSectionOpen={mobileAccountSectionOpen} wishlistProducts={wishlistProducts} onAddToCart={addToCart} onRemoveFromWishlist={removeFromWishlist} onOpenCart={() => setCartOpen(true)} cartCount={cartCount} refreshKey={ordersVersion} />;
+  const customerAccount = <CustomerAccount key={customerSession?.user?.id || "signed-out"} session={customerSession} authChecked={authChecked} onSignInSuccess={handleSignInSuccess} onAccountUpdated={handleAccountUpdated} activeSection={activeAccountSection} onSelectSection={selectAccountSection} onBackToSections={() => setMobileAccountSectionOpen(false)} mobileSectionOpen={mobileAccountSectionOpen} wishlistProducts={wishlistProducts} onAddToCart={addToCart} onRemoveFromWishlist={removeFromWishlist} onOpenCart={() => setCartOpen(true)} cartCount={cartCount} refreshKey={ordersVersion} />;
 
   return <main className={`page-view page-${activeView}${mobileAccountSectionOpen ? " mobile-account-section-open" : ""}`}>
     <header className="site-header"><button className="brand brand-mark" type="button" onClick={() => navigateTo("home")} aria-label="Virtuous Matess Ventures home"><BrandWordmark /></button><nav className="main-nav" aria-label="Main navigation"><button className={activeView === "home" ? "active" : ""} onClick={() => navigateTo("home")}>Home</button><button className={activeView === "shop" ? "active" : ""} onClick={() => navigateTo("shop")}>Shop</button><button className={activeView === "categories" ? "active" : ""} onClick={() => navigateTo("categories")}>Categories</button><button className={activeView === "about" ? "active" : ""} onClick={() => navigateTo("about")}>About</button></nav><div className="header-actions">{(activeView === "shop" || activeView === "categories") && <button className="icon-button catalog-search-toggle" type="button" onClick={() => setCatalogSearchOpen((open) => !open)} aria-label={catalogSearchOpen ? "Close product search" : "Search products"} aria-expanded={catalogSearchOpen}><Icon name="search" size={19} /></button>}<button className="icon-button mobile-wishlist-toggle" onClick={openWishlist} aria-label={`Wishlist, ${wishlistProducts.length} saved items`}><Icon name="heart" /></button><button className="icon-button account-toggle" onClick={() => navigateTo("account")} aria-label="Account"><Icon name="user" /></button><button className="bag-button" onClick={() => setCartOpen(true)} aria-label={`Open cart, ${cartCount} items`}><Icon name="bag" /><b>{cartCount}</b></button></div>{catalogSearchOpen && (activeView === "shop" || activeView === "categories") && <div className="catalog-search-popover"><Icon name="search" size={18} /><input ref={catalogSearchInput} id="catalog-search" type="search" aria-label="Search products by name or category" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search products" /><button type="button" onClick={() => setCatalogSearchOpen(false)} aria-label="Close product search"><Icon name="close" size={18} /></button></div>}</header>

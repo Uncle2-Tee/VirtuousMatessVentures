@@ -846,7 +846,7 @@ button,input,select,textarea { font:inherit; } button { cursor:pointer; touch-ac
   flex-direction:row;
   align-items:center;
   gap:0;
-  transform:none;
+  transform:translateX(-8px);
 }
 .site-header .brand-mark:hover { opacity:.9; }
 .brand-wordmark {

@@ -44,7 +44,7 @@ function formatDate(value) {
   return new Intl.DateTimeFormat("en-GH", { dateStyle: "medium" }).format(new Date(value));
 }
 
-export default function CustomerAccount({ session, authChecked, authCheckError, onRetrySessionCheck, onSignInSuccess, onAccountUpdated, activeSection, onSelectSection, onBackToSections, mobileSectionOpen, wishlistProducts, onAddToCart, onRemoveFromWishlist, onOpenCart, cartCount, refreshKey }) {
+export default function CustomerAccount({ session, authChecked, onSignInSuccess, onAccountUpdated, activeSection, onSelectSection, onBackToSections, mobileSectionOpen, wishlistProducts, onAddToCart, onRemoveFromWishlist, onOpenCart, cartCount, refreshKey }) {
   const [authMode, setAuthMode] = useState("signin");
   const [form, setForm] = useState({ identifier: "", username: "", phone: "", password: "", confirmPassword: "", verificationCode: "" });
   const [showPassword, setShowPassword] = useState(false);
@@ -402,18 +402,7 @@ export default function CustomerAccount({ session, authChecked, authCheckError, 
   }
 
   if (!session?.user && !authChecked) {
-    return <section className="customer-account-root customer-auth-screen" aria-live="polite">
-      <div className="customer-auth-card"><h1>Restoring your account</h1><p className="customer-auth-intro">Checking your saved sign-in. Please wait a moment.</p></div>
-    </section>;
-  }
-  if (!session?.user && authCheckError) {
-    return <section className="customer-account-root customer-auth-screen">
-      <div className="customer-auth-card">
-        <h1>We couldn’t check your account</h1>
-        <p className="customer-auth-intro" role="alert">{authCheckError}</p>
-        <button className="primary-button wide" type="button" onClick={onRetrySessionCheck}>Try again</button>
-      </div>
-    </section>;
+    return <section className="customer-account-root customer-auth-screen" aria-busy="true" />;
   }
   if (!session?.user || authMode === "recovery") {
     const currentAuthMode = authMode;
