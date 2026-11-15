@@ -47,6 +47,17 @@ async function uploadImageFile(file) {
   return url;
 }
 
+function toggleAdminDropdown(event) {
+  event.preventDefault();
+  event.stopPropagation();
+  const details = event.currentTarget.closest("details");
+  if (!details) throw new Error("Admin dropdown controls must be inside a details element.");
+  details.open = !details.open;
+  const expanded = String(details.open);
+  event.currentTarget.setAttribute("aria-expanded", expanded);
+  event.currentTarget.setAttribute("aria-label", `${details.open ? "Collapse" : "Expand"} ${event.currentTarget.dataset.dropdownLabel}`);
+}
+
 export default function AdminDashboard({ username }) {
   const greeting = useSyncExternalStore(subscribeToTimeGreeting, timeBasedGreeting, getServerGreeting);
   const [products, setProducts] = useState([]);
@@ -449,11 +460,11 @@ export default function AdminDashboard({ username }) {
     <section className="dashboard-overview-grid" aria-label="Customer activity, payment receipts, new listing, and live catalogue">
       <div className="dashboard-overview-left">
       <details className="orders-panel admin-dropdown-card">
-      <summary className="orders-panel-heading admin-dropdown-summary">
+      <summary className="orders-panel-heading admin-dropdown-summary" tabIndex={-1}>
         <span className="orders-panel-heading-copy"><span className="atelier-kicker">Customer activity</span><strong id="orders-heading">Orders <span className="orders-count">{orders.length}</span></strong></span>
-        <span className="admin-dropdown-chevron" aria-hidden="true">⌄</span>
+        <button className="admin-dropdown-toggle" type="button" aria-label="Expand orders" aria-expanded="false" aria-controls="orders-panel-content" data-dropdown-label="orders" onClick={toggleAdminDropdown}><span className="admin-dropdown-chevron" aria-hidden="true" /></button>
       </summary>
-      <div className="admin-dropdown-content">
+      <div className="admin-dropdown-content" id="orders-panel-content">
         <p className="orders-panel-description">New orders are checked every 30 seconds while the dashboard is open.</p>
       {newOrders.length > 0 && <div className="new-orders-alert" role="status"><div><strong>{newOrders.length === 1 ? "New order received" : `${newOrders.length} new orders received`}</strong><span>{newOrders[0].customer_name} · {money.format(Number(newOrders[0].total))}</span></div><button type="button" onClick={() => setNewOrders([])}>Mark as seen</button></div>}
       {orderMessage && <p className="orders-message" role="status">{orderMessage}</p>}
@@ -471,10 +482,10 @@ export default function AdminDashboard({ username }) {
       </div>
       </details>
       <section className="catalog-panel admin-receipts-panel" aria-labelledby="admin-payment-receipts-heading">
-        <details className="admin-receipts-dropdown">
-          <summary className="panel-heading admin-receipts-summary" aria-controls="admin-payment-receipts-content">
+        <details className="admin-receipts-dropdown admin-dropdown-card">
+          <summary className="panel-heading admin-receipts-summary admin-dropdown-summary" tabIndex={-1}>
             <span className="admin-receipts-heading-copy"><span className="atelier-kicker">Verified payments</span><span className="admin-receipts-title" id="admin-payment-receipts-heading" role="heading" aria-level="2">Payment receipts</span></span>
-            <span className="admin-receipts-summary-side"><span className="product-count">{paymentReceipts ? `${paymentReceipts.length} receipts` : "Recent payments"}</span><span className="admin-dropdown-chevron" aria-hidden="true">⌄</span></span>
+            <span className="admin-receipts-summary-side"><span className="product-count">{paymentReceipts ? `${paymentReceipts.length} receipts` : "Recent payments"}</span><button className="admin-dropdown-toggle" type="button" aria-label="Expand payment receipts" aria-expanded="false" aria-controls="admin-payment-receipts-content" data-dropdown-label="payment receipts" onClick={toggleAdminDropdown}><span className="admin-dropdown-chevron" aria-hidden="true" /></button></span>
           </summary>
           <div className="admin-receipts-content" id="admin-payment-receipts-content">
         <p className="admin-receipts-intro">Confirmed transactions linked to customer orders.</p>
@@ -511,12 +522,13 @@ export default function AdminDashboard({ username }) {
       </section>
     <section className="dashboard-grid">
       <form className="catalog-form" onSubmit={addProduct}>
-        <details className="listing-dropdown">
-          <summary className="listing-dropdown-summary">
+        <details className="listing-dropdown admin-dropdown-card">
+          <summary className="listing-dropdown-summary admin-dropdown-summary" tabIndex={-1}>
             <span><span className="atelier-kicker">New listing</span><strong>Add a product</strong></span>
             <span className="listing-dropdown-note">Create a catalogue listing</span>
+            <button className="admin-dropdown-toggle" type="button" aria-label="Expand new listing form" aria-expanded="false" aria-controls="listing-dropdown-content" data-dropdown-label="new listing form" onClick={toggleAdminDropdown}><span className="admin-dropdown-chevron" aria-hidden="true" /></button>
           </summary>
-          <div className="listing-dropdown-content">
+          <div className="listing-dropdown-content" id="listing-dropdown-content">
             <p className="listing-intro">Add the details customers need to discover and shop this product.</p>
             <section className="listing-form-section" aria-labelledby="listing-details-heading">
               <div className="listing-section-heading"><span>01</span><h3 id="listing-details-heading">Product details</h3></div>
@@ -555,40 +567,45 @@ export default function AdminDashboard({ username }) {
           </div>
           <p>Categories appear in product listings and storefront filters. Add a removed category again to restore it.</p>
         </form>
-        <section className="category-management" aria-labelledby="category-management-heading">
-          <div className="category-management-heading">
+        <details className="category-management admin-dropdown-card" aria-labelledby="category-management-heading">
+          <summary className="category-management-summary admin-dropdown-summary" tabIndex={-1}>
             <div><h3 id="category-management-heading">Manage categories</h3><span className="category-management-count">{categories.length} total</span></div>
+            <button className="admin-dropdown-toggle" type="button" aria-label="Expand category management" aria-expanded="false" aria-controls="category-management-content" data-dropdown-label="category management" onClick={toggleAdminDropdown}><span className="admin-dropdown-chevron" aria-hidden="true" /></button>
+          </summary>
+          <div className="category-management-content" id="category-management-content">
+            <div className="category-management-heading">
             <p>Remove any category. If it has products, choose where to move them first.</p>
             {!databaseReady && <button className="category-retry-button" type="button" onClick={() => { setCatalogueLoading(true); setCatalogueRetryKey((current) => current + 1); }} disabled={catalogueLoading}>{catalogueLoading ? "Checking database…" : "Retry connection"}</button>}
+            </div>
+            <ul className="category-management-list">
+              {categories.map((category) => {
+                const categoryKey = category.toLowerCase();
+                const isDefault = productCategories.some((item) => item.toLowerCase() === categoryKey);
+                const productCount = products.filter((product) => product.category.toLowerCase() === categoryKey).length;
+                const isRemoving = categoryRemoving === category;
+                const status = isDefault
+                  ? productCount ? `Default · ${productCount} ${productCount === 1 ? "product" : "products"}` : "Default"
+                  : productCount ? `${productCount} ${productCount === 1 ? "product" : "products"}` : "Custom";
+                return <li className="category-management-item" key={category}>
+                  <div className="category-management-copy">
+                    <span className="category-management-name">{category}</span>
+                    <span className={`category-management-status${isDefault ? " default" : productCount ? " in-use" : ""}`}>{status}</span>
+                  </div>
+                  <button
+                    className="category-remove-button"
+                    type="button"
+                    onClick={() => requestCategoryRemoval(category)}
+                    disabled={!databaseReady || categorySaving || Boolean(categoryRemoving)}
+                    aria-label={`Remove ${category} category`}
+                    title={productCount ? `Move ${productCount} ${productCount === 1 ? "product" : "products"} and remove ${category}` : `Remove ${category}`}
+                  >
+                    {isRemoving ? "…" : <DeleteOutlineIcon fontSize="small" />}
+                  </button>
+                </li>;
+              })}
+            </ul>
           </div>
-          <ul className="category-management-list">
-            {categories.map((category) => {
-              const categoryKey = category.toLowerCase();
-              const isDefault = productCategories.some((item) => item.toLowerCase() === categoryKey);
-              const productCount = products.filter((product) => product.category.toLowerCase() === categoryKey).length;
-              const isRemoving = categoryRemoving === category;
-              const status = isDefault
-                ? productCount ? `Default · ${productCount} ${productCount === 1 ? "product" : "products"}` : "Default"
-                : productCount ? `${productCount} ${productCount === 1 ? "product" : "products"}` : "Custom";
-              return <li className="category-management-item" key={category}>
-                <div className="category-management-copy">
-                  <span className="category-management-name">{category}</span>
-                  <span className={`category-management-status${isDefault ? " default" : productCount ? " in-use" : ""}`}>{status}</span>
-                </div>
-                <button
-                  className="category-remove-button"
-                  type="button"
-                  onClick={() => requestCategoryRemoval(category)}
-                  disabled={!databaseReady || categorySaving || Boolean(categoryRemoving)}
-                  aria-label={`Remove ${category} category`}
-                  title={productCount ? `Move ${productCount} ${productCount === 1 ? "product" : "products"} and remove ${category}` : `Remove ${category}`}
-                >
-                  {isRemoving ? "…" : <DeleteOutlineIcon fontSize="small" />}
-                </button>
-              </li>;
-            })}
-          </ul>
-        </section>
+        </details>
         {categoryRemoval && (() => {
           const categoryKey = categoryRemoval.name.toLowerCase();
           const productsToMove = products.filter((product) => product.category.toLowerCase() === categoryKey);
@@ -641,9 +658,9 @@ export default function AdminDashboard({ username }) {
             </section>
           </div>;
         })()}
-        <details className="catalog-dropdown">
-          <summary><span>Browse and manage products</span><span className="catalog-dropdown-count">{products.length}</span></summary>
-          <div className="catalog-list">{products.map((product) => <article key={product.id} className="catalog-item">
+        <details className="catalog-dropdown admin-dropdown-card">
+          <summary className="admin-dropdown-summary" tabIndex={-1}><span>Browse and manage products</span><span className="catalog-dropdown-count">{products.length}</span><button className="admin-dropdown-toggle" type="button" aria-label="Expand product catalogue" aria-expanded="false" aria-controls="catalog-dropdown-content" data-dropdown-label="product catalogue" onClick={toggleAdminDropdown}><span className="admin-dropdown-chevron" aria-hidden="true" /></button></summary>
+          <div className="catalog-list" id="catalog-dropdown-content">{products.map((product) => <article key={product.id} className="catalog-item">
             <div className="catalog-item-overview">
               <span className="catalog-image" style={{ backgroundImage: `url(${product.image})` }} />
               <div className="catalog-item-details"><h3>{product.name}</h3><p>{product.category} <i>·</i> {product.size}</p></div>

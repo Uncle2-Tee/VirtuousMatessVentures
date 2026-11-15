@@ -515,7 +515,6 @@ export default function Home() {
           <div className="wishlist-card-info">
             <p className="eyebrow">{product.category}</p><h3>{product.name}</h3>
             <p className="wishlist-card-price">{money.format(product.price)}{product.originalPrice > product.price && <del>{money.format(product.originalPrice)}</del>}</p>
-            <div className="wishlist-product-meta"><span>{product.discountLabel || (product.discountPercent ? `${product.discountPercent}% off` : "No current discount")}</span><span className={product.rating ? "wishlist-rating rated" : "wishlist-rating"}>{product.rating ? <><Icon name="star" size={15} /> {product.rating}</> : "Not rated"}</span></div>
             <button className="add-to-cart-button" onClick={() => addToCart(product)}>Add to cart <Icon name="bag" size={16} /></button>
           </div>
         </article>)}
@@ -531,7 +530,7 @@ export default function Home() {
         <h1>
           <span className="hero-heading-line">Discover</span><br />
           <span className="hero-heading-line">Style That</span><br />
-          <span className="hero-heading-line">Defines You <span className="hero-brand-name">With Virtuous Matess Ventures</span></span>
+          <span className="hero-heading-line">Defines You <span className="hero-brand-name"><span className="hero-brand-with">With</span> Virtuous Matess Ventures</span></span>
         </h1>
         <p className="hero-text">Elevate your style with our curated collection of premium essentials. Thoughtful picks, unmatched quality.</p>
         <div className="hero-actions">

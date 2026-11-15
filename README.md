@@ -57,6 +57,8 @@ Configure `PAYSTACK_SECRET_KEY` as a server-only environment variable in local d
 
 Customer sign-up verifies the chosen email or phone number before allowing account creation. Configure `RESEND_API_KEY` and `RESEND_FROM_EMAIL` for email verification, and `ARKESEL_API_KEY` plus a registered `ARKESEL_SENDER_ID` for SMS verification. These values must be server-side environment variables; do not expose or commit provider keys. After verifying contact and creating a password, customers are sent to password-only login.
 
+Arkesel also sends the administrator an SMS after Paystack confirms payment and the order is created. Set `ADMIN_ORDER_SMS_PHONE` to the admin's international phone number (for example, `233XXXXXXXXX`). The notification runs after the payment response, so SMS delivery issues do not undo a verified payment. Failed sends are logged on the server.
+
 Add these values to `.env.local` for local development and to the deployment environment for production:
 
 ```dotenv
@@ -64,6 +66,7 @@ RESEND_API_KEY=your-resend-api-key
 RESEND_FROM_EMAIL=Virtuous Matess Ventures <verified-sender@example.com>
 ARKESEL_API_KEY=your-arkesel-main-api-key
 ARKESEL_SENDER_ID=your-registered-sender-id
+ADMIN_ORDER_SMS_PHONE=233XXXXXXXXX
 ```
 
 ## Checks

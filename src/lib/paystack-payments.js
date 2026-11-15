@@ -1,3 +1,5 @@
+import { after } from "next/server";
+import { sendArkeselAdminOrderSms } from "./arkesel-sms";
 import { prisma } from "./prisma";
 import { verifyPaystackTransaction } from "./paystack";
 
@@ -20,14 +22,16 @@ export async function verifyAndRecordPaystackPayment(reference) {
     return { verified: false, reason: "transaction_mismatch" };
   }
 
-  const orderId = await prisma.$transaction(async (database) => {
+  const recordedOrder = await prisma.$transaction(async (database) => {
     const updatedAttempt = await database.paymentAttempt.updateMany({
       where: { id: attempt.id, status: "pending" },
       data: { status: "successful" },
     });
     if (updatedAttempt.count === 0) {
       const currentAttempt = await database.paymentAttempt.findUnique({ where: { id: attempt.id } });
-      if (currentAttempt?.status === "successful") return currentAttempt.orderId;
+      if (currentAttempt?.status === "successful") {
+        return { orderId: currentAttempt.orderId, notification: null };
+      }
       throw new Error("Paystack payment attempt changed before verification was recorded.");
     }
 
@@ -36,7 +40,7 @@ export async function verifyAndRecordPaystackPayment(reference) {
         where: { id: attempt.orderId, status: "awaiting_payment" },
         data: { status: "payment_review" },
       });
-      return attempt.orderId;
+      return { orderId: attempt.orderId, notification: null };
     }
 
     const checkout = attempt.checkoutData;
@@ -81,8 +85,24 @@ export async function verifyAndRecordPaystackPayment(reference) {
       where: { id: attempt.id },
       data: { orderId: order.id, checkoutData: null },
     });
-    return order.id;
+    return {
+      orderId: order.id,
+      notification: { id: order.id, customerName: order.customerName, total: order.total },
+    };
   });
 
-  return { verified: true, orderId };
+  if (recordedOrder.notification) {
+    after(async () => {
+      try {
+        await sendArkeselAdminOrderSms(recordedOrder.notification);
+      } catch (error) {
+        console.error("Could not send admin order SMS:", {
+          orderId: recordedOrder.orderId,
+          error: error instanceof Error ? error.message : "Unknown Arkesel SMS error.",
+        });
+      }
+    });
+  }
+
+  return { verified: true, orderId: recordedOrder.orderId };
 }
