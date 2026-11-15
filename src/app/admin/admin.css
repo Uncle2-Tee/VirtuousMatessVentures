@@ -224,15 +224,21 @@
   margin-left:-6px;
   margin-right:auto;
   justify-content:flex-start;
+  animation:admin-brand-reveal 720ms cubic-bezier(.2,.75,.3,1) both;
 }
 .dashboard-brand-logo .brand-wordmark {
   width:100%;
   max-width:200px;
   justify-content:flex-start;
 }
-.dashboard-brand-logo .brand-wordmark-logo {
-  width:100%;
-  max-height:64px;
+.admin-login-logo .brand-wordmark-logo { width:100%; max-height:90px; }
+.dashboard-brand-logo .brand-wordmark-logo { width:100%; max-height:64px; }
+@keyframes admin-brand-reveal {
+  from { opacity:0; transform:translateX(-9px) scale(.98); }
+  to { opacity:1; transform:translateX(0) scale(1); }
+}
+@media (prefers-reduced-motion:reduce) {
+  .dashboard-header .dashboard-brand-logo { animation:none; }
 }
 .dashboard-header .dashboard-password-toggle,.dashboard-header .dashboard-header-actions>button:last-child { min-height:38px; display:inline-flex; align-items:center; justify-content:center; gap:7px; padding:0 14px; border:1px solid #76578d; border-radius:999px; background:#76578d; color:#fff; font-size:10px; font-weight:600; letter-spacing:.04em; cursor:pointer; transition:background .18s ease,color .18s ease,border-color .18s ease; }
 .dashboard-header .dashboard-password-toggle:hover { border-color:#614578; background:#614578; }

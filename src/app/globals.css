@@ -856,18 +856,46 @@ button,input,select,textarea { font:inherit; } button { cursor:pointer; touch-ac
   width:auto;
   max-width:none;
   min-width:0;
+  position:relative;
+  isolation:isolate;
+  overflow:hidden;
   color:#211c18;
   text-align:left;
   background:transparent;
 }
+.brand-wordmark::after {
+  position:absolute;
+  z-index:1;
+  top:-25%;
+  bottom:-25%;
+  left:-45%;
+  width:28%;
+  background:linear-gradient(105deg,transparent 0%,rgba(255,255,255,.04) 24%,rgba(255,255,255,.84) 52%,rgba(249,183,70,.36) 64%,transparent 100%);
+  content:"";
+  opacity:0;
+  pointer-events:none;
+  transform:skewX(-18deg);
+  animation:brand-wordmark-sheen 4s linear infinite;
+}
+@keyframes brand-wordmark-sheen {
+  0% { opacity:0; transform:translateX(0) skewX(-18deg); }
+  8% { opacity:.9; }
+  92% { opacity:.9; transform:translateX(520%) skewX(-18deg); }
+  100% { opacity:0; transform:translateX(520%) skewX(-18deg); }
+}
 .brand-wordmark-logo {
   display:block;
+  position:relative;
+  z-index:0;
   width:100%;
   height:auto;
   object-fit:contain;
   max-height:72px;
   background:transparent;
   filter:none;
+}
+@media (prefers-reduced-motion:reduce) {
+  .brand-wordmark::after { animation:none; }
 }
 .customer-auth-wordmark .brand-wordmark-logo { max-height:58px; }
 @media (max-width:900px) {
