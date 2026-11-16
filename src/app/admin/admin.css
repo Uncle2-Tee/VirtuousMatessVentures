@@ -374,11 +374,11 @@
 .catalog-item h3 { margin-bottom:5px; overflow-wrap:anywhere; }
 .catalog-remove-button { flex:0 0 auto; margin:0; padding:7px 10px; border:1px solid #ead8dc !important; border-radius:999px; background:#fff8f8 !important; color:#984c56 !important; font-size:8px !important; font-weight:600; letter-spacing:.06em; text-decoration:none !important; }
 .catalog-remove-button:hover { border-color:#d8b8bf !important; background:#fdf0f1 !important; }
-.catalog-editors { display:grid; grid-template-columns:minmax(0,1.2fr) minmax(0,1.3fr) minmax(0,.9fr); gap:12px; padding-left:70px; }
-.catalog-category-editor,.catalog-name-editor,.catalog-price-editor { display:grid; min-width:0; align-content:start; gap:6px; margin:0; }
-.catalog-category-editor label,.catalog-name-editor label,.catalog-price-editor label { margin:0; color:#746681; font-size:8px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; }
+.catalog-editors { display:grid; grid-template-columns:minmax(0,1.2fr) minmax(0,1.3fr) minmax(0,.9fr) minmax(0,.8fr); gap:12px; padding-left:70px; }
+.catalog-category-editor,.catalog-name-editor,.catalog-price-editor,.catalog-stock-editor { display:grid; min-width:0; align-content:start; gap:6px; margin:0; }
+.catalog-category-editor label,.catalog-name-editor label,.catalog-price-editor label,.catalog-stock-editor label { margin:0; color:#746681; font-size:8px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; }
 .catalog-name-editor>div,.catalog-price-editor>div { display:flex; min-width:0; align-items:stretch; gap:6px; }
-.catalog-category-editor select,.catalog-name-editor input,.catalog-price-editor input { width:100%; min-width:0; height:34px; padding:7px 8px; border:1px solid #ded5eb; border-radius:6px; background:#fff; color:var(--atelier-ink); font-size:11px; }
+.catalog-category-editor select,.catalog-name-editor input,.catalog-price-editor input,.catalog-stock-editor input { width:100%; min-width:0; height:34px; padding:7px 8px; border:1px solid #ded5eb; border-radius:6px; background:#fff; color:var(--atelier-ink); font-size:11px; }
 .catalog-category-editor select:focus { border-color:#927bad; outline:2px solid rgba(114,88,144,.18); outline-offset:1px; }
 .catalog-price-editor input { width:88px; flex:1 1 88px; }
 .catalog-item .catalog-name-editor button,.catalog-price-editor button { flex:0 0 auto; min-height:34px; margin:0; padding:0 9px; border:1px solid #725890; border-radius:6px; background:#725890; color:#fff; font-size:8px; font-weight:600; letter-spacing:.03em; text-decoration:none; text-transform:uppercase; }
@@ -444,8 +444,8 @@
 .catalog-dropdown-count { background:#e9e5f0; color:#5f5279; }
 .catalog-item { border-color:#e5e1ed; }
 .catalog-image { border-color:#e5e1ed; background-color:#e9e6ef; }
-.catalog-name-editor label,.catalog-price-editor label { color:#6b617e; }
-.catalog-name-editor input,.catalog-price-editor input { border-color:#dcd6e7; }
+.catalog-name-editor label,.catalog-price-editor label,.catalog-stock-editor label { color:#6b617e; }
+.catalog-name-editor input,.catalog-price-editor input,.catalog-stock-editor input { border-color:#dcd6e7; }
 .catalog-name-editor input:focus { border-color:#8a7da4; outline-color:rgba(111,100,133,.18); }
 .catalog-item .catalog-name-editor button,.catalog-price-editor button { border-color:#6f6485; background:#6f6485; }
 .catalog-item .catalog-name-editor button:hover,.catalog-price-editor button:hover { color:#5d5273; }
@@ -654,6 +654,7 @@
 .admin-password-fields input:focus,
 .catalog-name-editor input:focus,
 .catalog-price-editor input:focus,
+.catalog-stock-editor input:focus,
 .catalog-form .listing-form-section input:not([type="file"]):focus,
 .catalog-form .listing-form-section select:focus,
 .catalog-form .listing-form-section textarea:focus {
@@ -667,7 +668,8 @@
 .login-card form input,
 .admin-password-fields input,
 .catalog-name-editor input,
-.catalog-price-editor input { border-color:var(--atelier-line); }
+.catalog-price-editor input,
+.catalog-stock-editor input { border-color:var(--atelier-line); }
 .orders-count,
 .catalog-dropdown-count {
   background:var(--atelier-sage);

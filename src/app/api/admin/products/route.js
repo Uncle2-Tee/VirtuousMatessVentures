@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { ADMIN_SESSION_COOKIE, hasValidAdminSession } from "../../../../lib/admin-auth";
 import { activeProductCategories, productCategories } from "../../../../lib/catalog";
+import { processExpiredInventoryReservations } from "../../../../lib/paystack-payments";
 import { prisma } from "../../../../lib/prisma";
 import { productFromDatabaseRow, productToDatabaseRow, validProduct } from "../../../../lib/products";
 
@@ -30,6 +31,7 @@ export async function GET() {
   if (!(await requireAdmin())) return NextResponse.json({ error: "Admin sign-in required." }, { status: 401 });
   if (!process.env.DATABASE_URL) return databaseUnavailable();
   try {
+    await processExpiredInventoryReservations();
     const [products, savedCategories] = await Promise.all([
       prisma.product.findMany({ orderBy: { sortOrder: "asc" } }),
       prisma.productCategory.findMany({
@@ -56,7 +58,7 @@ export async function POST(request) {
   } catch {
     return NextResponse.json({ error: "Invalid product data." }, { status: 400 });
   }
-  if (!validProduct(product)) return NextResponse.json({ error: "Complete all required product fields with a valid price." }, { status: 400 });
+  if (!validProduct(product)) return NextResponse.json({ error: "Complete all required product fields with a valid price and stock quantity." }, { status: 400 });
 
   try {
     if (!(await isActiveCategory(product.category))) {
@@ -97,6 +99,12 @@ export async function PATCH(request) {
     if (!Number.isFinite(price) || price <= 0) return NextResponse.json({ error: "Price must be greater than zero." }, { status: 400 });
     update.price = price;
   }
+  if (Object.hasOwn(changes, "stockQuantity")) {
+    if (!Number.isSafeInteger(changes.stockQuantity) || changes.stockQuantity < 0 || changes.stockQuantity > 2_147_483_647) {
+      return NextResponse.json({ error: "Stock quantity must be a whole number between 0 and 2,147,483,647." }, { status: 400 });
+    }
+    update.stockQuantity = changes.stockQuantity;
+  }
   if (Object.hasOwn(changes, "category")) {
     if (typeof changes.category !== "string" || !changes.category.trim() || changes.category.trim().length > 50) {
       return NextResponse.json({ error: "Product category must be between 1 and 50 characters." }, { status: 400 });
@@ -113,7 +121,7 @@ export async function PATCH(request) {
     if (typeof changes.cardDescription !== "string") return NextResponse.json({ error: "The featured description must be text." }, { status: 400 });
     update.cardDescription = changes.cardDescription;
   }
-  if (Object.keys(changes).some((key) => key !== "name" && key !== "price" && key !== "category" && key !== "cardDescription")) {
+  if (Object.keys(changes).some((key) => key !== "name" && key !== "price" && key !== "stockQuantity" && key !== "category" && key !== "cardDescription")) {
     return NextResponse.json({ error: "Unsupported product fields." }, { status: 400 });
   }
 

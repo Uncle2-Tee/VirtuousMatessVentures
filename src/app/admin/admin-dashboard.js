@@ -7,13 +7,13 @@ import CloseIcon from "@mui/icons-material/Close";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlineOutlined";
 import VisibilityIcon from "@mui/icons-material/VisibilityOutlined";
 import VisibilityOffIcon from "@mui/icons-material/VisibilityOffOutlined";
-import { defaultProductCaution, defaultProductUsage, mergeProductCategories, productCategories } from "../../lib/catalog";
+import { defaultProductCaution, defaultProductUsage, getProductSizePlaceholder, mergeProductCategories, productCategories } from "../../lib/catalog";
 import { notifyCustomerOrderUpdate } from "../../lib/customer-order-updates";
 import { notifyProductCatalogUpdate } from "../../lib/product-catalog-updates";
 import BrandWordmark from "../components/brand-wordmark";
 
 const money = new Intl.NumberFormat("en-GH", { style: "currency", currency: "GHS", minimumFractionDigits: 2 });
-const emptyForm = { name: "", category: "Dresses", price: "", size: "", image: "", description: "", howToUse: defaultProductUsage, caution: defaultProductCaution };
+const emptyForm = { name: "", category: "Dresses", price: "", size: "", stockQuantity: "", image: "", description: "", howToUse: defaultProductUsage, caution: defaultProductCaution };
 const orderStatuses = ["awaiting_payment", "payment_review", "processing", "shipped", "delivered", "cancelled"];
 
 function timeBasedGreeting() {
@@ -72,6 +72,7 @@ export default function AdminDashboard({ username }) {
   const [catalogueLoading, setCatalogueLoading] = useState(true);
   const [nameDrafts, setNameDrafts] = useState({});
   const [priceDrafts, setPriceDrafts] = useState({});
+  const [stockDrafts, setStockDrafts] = useState({});
   const [savingProductIds, setSavingProductIds] = useState({});
   const [message, setMessage] = useState("");
   const [uploadingImage, setUploadingImage] = useState(false);
@@ -213,7 +214,7 @@ export default function AdminDashboard({ username }) {
     if (!databaseReady) return;
     if (!form.image) { setMessage("Upload a product image."); return; }
     const description = form.description.trim() || "A thoughtfully selected piece for everyday style and living.";
-    const product = { id: `${Date.now()}-${form.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`, name: form.name.trim(), category: form.category, price: Number(form.price), size: form.size.trim() || "One size", image: form.image, description, cardDescription: description, howToUse: form.howToUse.trim() || defaultProductUsage, caution: form.caution.trim() || defaultProductCaution, badge: "Just added" };
+    const product = { id: `${Date.now()}-${form.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`, name: form.name.trim(), category: form.category, price: Number(form.price), size: form.size.trim() || "One size", stockQuantity: Number(form.stockQuantity), image: form.image, description, cardDescription: description, howToUse: form.howToUse.trim() || defaultProductUsage, caution: form.caution.trim() || defaultProductCaution, badge: "Just added" };
     try {
       const { product: saved } = await readApiResponse(await fetch("/api/admin/products", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ product }) }));
       setProducts((current) => [saved, ...current]);
@@ -327,8 +328,11 @@ export default function AdminDashboard({ username }) {
   async function saveProduct(product) {
     const name = (nameDrafts[product.id] ?? product.name).trim();
     const priceValue = priceDrafts[product.id] ?? String(product.price);
+    const stockQuantityChanged = Object.hasOwn(stockDrafts, product.id);
+    const stockValue = stockDrafts[product.id] ?? String(product.stockQuantity);
     const category = productCategoryDrafts[product.id] ?? product.category;
     const price = Number(priceValue);
+    const stockQuantity = Number(stockValue);
     if (!name) {
       setMessage("Enter a product name.");
       return;
@@ -341,18 +345,23 @@ export default function AdminDashboard({ username }) {
       setMessage("Enter a valid price greater than zero.");
       return;
     }
+    if (stockQuantityChanged && (stockValue.trim() === "" || !Number.isSafeInteger(stockQuantity) || stockQuantity < 0 || stockQuantity > 2_147_483_647)) {
+      setMessage("Enter a whole stock quantity between 0 and 2,147,483,647.");
+      return;
+    }
 
     setSavingProductIds((current) => ({ ...current, [product.id]: true }));
     try {
       const { product: saved } = await readApiResponse(await fetch("/api/admin/products", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: product.id, name, price, ...(category !== product.category ? { category } : {}) }),
+        body: JSON.stringify({ id: product.id, name, price, ...(stockQuantityChanged ? { stockQuantity } : {}), ...(category !== product.category ? { category } : {}) }),
       }));
       setProducts((current) => current.map((item) => item.id === product.id ? saved : item));
       notifyProductCatalogUpdate();
       setNameDrafts((current) => { const next = { ...current }; delete next[product.id]; return next; });
       setPriceDrafts((current) => { const next = { ...current }; delete next[product.id]; return next; });
+      setStockDrafts((current) => { const next = { ...current }; delete next[product.id]; return next; });
       setProductCategoryDrafts((current) => { const next = { ...current }; delete next[product.id]; return next; });
       setMessage(`${saved.name} updated.`);
     } catch (error) {
@@ -534,7 +543,7 @@ export default function AdminDashboard({ username }) {
               <div className="listing-section-heading"><span>01</span><h3 id="listing-details-heading">Product details</h3></div>
               <label>Product name<input required value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="e.g. Sneakers" /></label>
               <div className="field-row listing-field-row"><label>Category<select value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })}>{categories.map((category) => <option key={category}>{category}</option>)}</select></label><label>Price (GHS)<input required min="0.01" step="0.01" type="number" value={form.price} onChange={(event) => setForm({ ...form, price: event.target.value })} placeholder="36.00" /></label></div>
-              <label>Size<input value={form.size} onChange={(event) => setForm({ ...form, size: event.target.value })} placeholder="One size" /></label>
+              <div className="field-row listing-field-row"><label>Size<input value={form.size} onChange={(event) => setForm({ ...form, size: event.target.value })} placeholder={getProductSizePlaceholder(form.category)} /></label><label>Stock quantity<input required type="number" min="0" max="2147483647" step="1" value={form.stockQuantity} onChange={(event) => setForm({ ...form, stockQuantity: event.target.value })} placeholder="e.g. 25" /><small>Available units; pending payments reserve stock temporarily.</small></label></div>
               <div className="listing-image-field">
                 <span className="listing-field-label">Product image <span>Required</span></span>
                 <label className={`listing-image-upload${form.image ? " has-image" : ""}`}>
@@ -663,13 +672,14 @@ export default function AdminDashboard({ username }) {
           <div className="catalog-list" id="catalog-dropdown-content">{products.map((product) => <article key={product.id} className="catalog-item">
             <div className="catalog-item-overview">
               <span className="catalog-image" style={{ backgroundImage: `url(${product.image})` }} />
-              <div className="catalog-item-details"><h3>{product.name}</h3><p>{product.category} <i>·</i> {product.size}</p></div>
+              <div className="catalog-item-details"><h3>{product.name}</h3><p>{product.category} <i>·</i> {product.size}</p><small>{product.stockQuantity} {product.stockQuantity === 1 ? "item" : "items"} available</small></div>
               <button className="catalog-remove-button" type="button" onClick={() => deleteProduct(product)} aria-label={`Remove ${product.name}`}>Remove</button>
             </div>
             <div className="catalog-editors">
               <div className="catalog-category-editor"><label htmlFor={`category-${product.id}`}>Category</label><select id={`category-${product.id}`} aria-label={`Category for ${product.name}`} value={productCategoryDrafts[product.id] ?? product.category} onChange={(event) => setProductCategoryDrafts((current) => ({ ...current, [product.id]: event.target.value }))}>{categories.map((category) => <option key={category}>{category}</option>)}</select></div>
               <div className="catalog-name-editor"><label htmlFor={`name-${product.id}`}>Product name</label><div><input id={`name-${product.id}`} aria-label={`Name for ${product.name}`} maxLength={200} value={nameDrafts[product.id] ?? product.name} onChange={(event) => setNameDrafts((current) => ({ ...current, [product.id]: event.target.value }))} /></div></div>
               <div className="catalog-price-editor"><label htmlFor={`price-${product.id}`}>Price (GHS)</label><div><input id={`price-${product.id}`} aria-label={`Price for ${product.name} in Ghana cedis`} type="number" min="0.01" step="0.01" required value={priceDrafts[product.id] ?? String(product.price)} onChange={(event) => setPriceDrafts((current) => ({ ...current, [product.id]: event.target.value }))} /></div></div>
+              <div className="catalog-stock-editor"><label htmlFor={`stock-${product.id}`}>Stock quantity</label><input id={`stock-${product.id}`} aria-label={`Stock quantity for ${product.name}`} type="number" min="0" max="2147483647" step="1" required value={stockDrafts[product.id] ?? String(product.stockQuantity)} onChange={(event) => setStockDrafts((current) => ({ ...current, [product.id]: event.target.value }))} /></div>
               <button className="catalog-save-button" type="button" onClick={() => saveProduct(product)} disabled={Boolean(savingProductIds[product.id])}>{savingProductIds[product.id] ? "Saving…" : "Save changes"}</button>
             </div>
           </article>)}</div>

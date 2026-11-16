@@ -14,6 +14,35 @@ export function normalizeProductCategoryName(name) {
   return typeof name === "string" ? name.trim().replace(/\s+/g, " ") : "";
 }
 
+export function getProductSizePlaceholder(category) {
+  const name = normalizeProductCategoryName(category).toLowerCase();
+  if (/\b(dresses?|clothing|apparel|fashion|shirts?|tops?|pants|trousers|jeans|skirts?|activewear|swimwear|outerwear)\b/.test(name)) {
+    return "e.g. Small, Medium, Large, X-Large";
+  }
+  if (/\b(footwear|shoes?|sneakers?|boots?|sandals?)\b/.test(name)) {
+    return "e.g. EU 36, EU 37, EU 38";
+  }
+  if (/\b(jewelry|jewellery|accessor(?:y|ies)|handbags?|bags?)\b/.test(name)) {
+    return "e.g. One size, adjustable, or 6 in";
+  }
+  if (/\bbedding\b/.test(name)) {
+    return "e.g. Twin, Full, Queen, or King";
+  }
+  if (/\b(storage|organizers?)\b/.test(name)) {
+    return "e.g. Small, Medium, Large, or 30 x 20 x 15 cm";
+  }
+  if (/\bfurniture\b/.test(name)) {
+    return "e.g. 120 x 80 x 75 cm or One size";
+  }
+  if (/\belectronics?\b/.test(name)) {
+    return "e.g. One size, 128 GB, or model number";
+  }
+  if (/\b(beauty|skincare|cosmetics|haircare)\b/.test(name)) {
+    return "e.g. 30 ml, 50 ml, or 100 g";
+  }
+  return "e.g. Small, Medium, Large, dimensions, or One size";
+}
+
 export function mergeProductCategories(...groups) {
   const categories = new Map();
   for (const group of groups) {

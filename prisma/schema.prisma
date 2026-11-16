@@ -13,6 +13,7 @@ model Product {
   category        String
   price           Decimal  @db.Decimal(10, 2)
   size            String
+  stockQuantity   Int      @default(0) @map("stock_quantity")
   image           String
   description     String
   cardDescription String   @map("card_description")
@@ -60,21 +61,23 @@ model Order {
 }
 
 model PaymentAttempt {
-  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  orderId      String?  @map("order_id") @db.Uuid
-  userId       String?  @map("user_id") @db.Uuid
-  checkoutData Json?    @map("checkout_data") @db.JsonB
-  reference    String   @unique
-  amount       Int
-  currency     String   @default("GHS")
-  status       String   @default("initializing")
-  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
-  order        Order?   @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  user         CustomerProfile? @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                   String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orderId              String?  @map("order_id") @db.Uuid
+  userId               String?  @map("user_id") @db.Uuid
+  checkoutData         Json?    @map("checkout_data") @db.JsonB
+  reference            String   @unique
+  amount               Int
+  currency             String   @default("GHS")
+  status               String   @default("initializing")
+  reservationExpiresAt DateTime? @map("reservation_expires_at") @db.Timestamptz(6)
+  createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  order                Order?   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  user                 CustomerProfile? @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([orderId, createdAt])
   @@index([userId, createdAt])
+  @@index([status, reservationExpiresAt])
   @@map("payment_attempts")
 }
 

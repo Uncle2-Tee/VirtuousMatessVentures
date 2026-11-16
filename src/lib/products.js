@@ -5,6 +5,7 @@ export function productToDatabaseRow(product) {
     category: product.category,
     price: product.price,
     size: product.size,
+    stockQuantity: product.stockQuantity ?? 0,
     image: product.image,
     description: product.description,
     cardDescription: product.cardDescription || product.description,
@@ -26,6 +27,7 @@ export function productFromDatabaseRow(row) {
     category: row.category,
     price: Number(row.price),
     size: row.size,
+    stockQuantity: row.stockQuantity,
     image: row.image,
     description: row.description,
     cardDescription: row.cardDescription,
@@ -51,6 +53,9 @@ export function validProduct(product) {
     && product.category.trim()
     && Number.isFinite(Number(product.price))
     && Number(product.price) > 0
+    && Number.isSafeInteger(product.stockQuantity)
+    && product.stockQuantity >= 0
+    && product.stockQuantity <= 2_147_483_647
     && typeof product.size === "string"
     && typeof product.image === "string"
     && typeof product.description === "string",

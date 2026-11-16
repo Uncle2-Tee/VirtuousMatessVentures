@@ -1,8 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { getAuthenticatedUser } from "../../../../lib/customer-auth";
+import { failPaymentAttemptAndReleaseStock, InsufficientStockError, reserveProductStock } from "../../../../lib/inventory";
 import { prisma } from "../../../../lib/prisma";
 import { getPaystackCallbackUrl, getPaystackSecretKey, initializePaystackTransaction } from "../../../../lib/paystack";
+import { processExpiredInventoryReservations } from "../../../../lib/paystack-payments";
 
 export const runtime = "nodejs";
 
@@ -35,10 +37,11 @@ export async function POST(request) {
   }
 
   try {
+    await processExpiredInventoryReservations();
     const productIds = [...new Set(items.map((item) => item.productId))];
     const products = await prisma.product.findMany({
       where: { id: { in: productIds } },
-      select: { id: true, name: true, price: true, image: true, size: true, category: true },
+      select: { id: true, name: true, price: true, image: true, size: true, category: true, stockQuantity: true },
     });
     const productsById = new Map(products.map((product) => [product.id, product]));
     if (productIds.some((id) => !productsById.has(id))) {
@@ -74,22 +77,26 @@ export async function POST(request) {
       return NextResponse.json({ error: "Configure PAYSTACK_CALLBACK_URL as the HTTPS /api/paystack/callback URL." }, { status: 503 });
     }
 
-    const attempt = await prisma.paymentAttempt.create({
-      data: {
-        reference: `sbc_${randomUUID().replaceAll("-", "")}`,
-        amount,
-        userId: user.id,
-        checkoutData: {
-          items: orderItems,
-          subtotal,
-          shipping,
-          total,
-          customerName: customerName.trim(),
-          customerEmail: customerEmail.trim().toLowerCase(),
-          phone: phone.trim(),
-          shippingAddress: `${shippingAddress.trim()}\nCity / town: ${city.trim()}`,
+    const attempt = await prisma.$transaction(async (database) => {
+      await reserveProductStock(database, items);
+      return database.paymentAttempt.create({
+        data: {
+          reference: `sbc_${randomUUID().replaceAll("-", "")}`,
+          amount,
+          userId: user.id,
+          reservationExpiresAt: new Date(Date.now() + 30 * 60 * 1000),
+          checkoutData: {
+            items: orderItems,
+            subtotal,
+            shipping,
+            total,
+            customerName: customerName.trim(),
+            customerEmail: customerEmail.trim().toLowerCase(),
+            phone: phone.trim(),
+            shippingAddress: `${shippingAddress.trim()}\nCity / town: ${city.trim()}`,
+          },
         },
-      },
+      });
     });
     try {
       const transaction = await initializePaystackTransaction({
@@ -105,14 +112,19 @@ export async function POST(request) {
       await prisma.paymentAttempt.update({ where: { id: attempt.id }, data: { status: "pending" } });
       return NextResponse.json({ accessCode: transaction.accessCode, reference: transaction.reference });
     } catch (error) {
-      await prisma.paymentAttempt.update({
-        where: { id: attempt.id },
-        data: { status: "failed", checkoutData: null },
+      await prisma.$transaction(async (database) => {
+        const currentAttempt = await database.paymentAttempt.findUnique({ where: { id: attempt.id } });
+        if (currentAttempt) {
+          await failPaymentAttemptAndReleaseStock(database, currentAttempt, "initializing");
+        }
       });
       console.error("Could not initialize Paystack checkout:", error);
       return NextResponse.json({ error: "Could not start Paystack checkout. Please try again." }, { status: 502 });
     }
   } catch (error) {
+    if (error instanceof InsufficientStockError) {
+      return NextResponse.json({ error: error.message }, { status: 409 });
+    }
     console.error("Could not prepare Paystack payment:", error);
     return NextResponse.json({ error: "Could not prepare checkout for payment." }, { status: 500 });
   }

@@ -1,5 +1,6 @@
 import { after } from "next/server";
 import { sendArkeselAdminOrderSms } from "./arkesel-sms";
+import { failPaymentAttemptAndReleaseStock } from "./inventory";
 import { prisma } from "./prisma";
 import { verifyPaystackTransaction } from "./paystack";
 
@@ -15,17 +16,23 @@ export async function verifyAndRecordPaystackPayment(reference) {
 
   const transaction = await verifyPaystackTransaction(reference);
   if (transaction.reference !== reference
-    || transaction.status !== "success"
     || Number(transaction.amount) !== attempt.amount
     || transaction.currency !== attempt.currency
     || transaction.metadata?.payment_attempt_id !== attempt.id) {
     return { verified: false, reason: "transaction_mismatch" };
   }
+  if (transaction.status !== "success") {
+    if (["abandoned", "failed", "reversed"].includes(transaction.status)) {
+      await prisma.$transaction((database) => failPaymentAttemptAndReleaseStock(database, attempt, "pending"));
+      return { verified: false, reason: "payment_failed" };
+    }
+    return { verified: false, reason: "payment_pending" };
+  }
 
   const recordedOrder = await prisma.$transaction(async (database) => {
     const updatedAttempt = await database.paymentAttempt.updateMany({
       where: { id: attempt.id, status: "pending" },
-      data: { status: "successful" },
+      data: { status: "successful", reservationExpiresAt: null },
     });
     if (updatedAttempt.count === 0) {
       const currentAttempt = await database.paymentAttempt.findUnique({ where: { id: attempt.id } });
@@ -105,4 +112,29 @@ export async function verifyAndRecordPaystackPayment(reference) {
   }
 
   return { verified: true, orderId: recordedOrder.orderId };
+}
+
+export async function processExpiredInventoryReservations() {
+  const attempts = await prisma.paymentAttempt.findMany({
+    where: { status: { in: ["initializing", "pending"] }, reservationExpiresAt: { lte: new Date() } },
+    select: { id: true, reference: true, status: true, checkoutData: true },
+    orderBy: { reservationExpiresAt: "asc" },
+    take: 20,
+  });
+  for (const attempt of attempts) {
+    try {
+      if (attempt.status === "initializing") {
+        await prisma.$transaction((database) => failPaymentAttemptAndReleaseStock(database, attempt, "initializing"));
+      } else {
+        await verifyAndRecordPaystackPayment(attempt.reference);
+      }
+    } catch (error) {
+      console.error("Could not reconcile an expired inventory reservation:", error);
+    } finally {
+      await prisma.paymentAttempt.updateMany({
+        where: { id: attempt.id, status: "pending" },
+        data: { reservationExpiresAt: new Date(Date.now() + 5 * 60 * 1000) },
+      });
+    }
+  }
 }

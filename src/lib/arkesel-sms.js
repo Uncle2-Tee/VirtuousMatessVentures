@@ -25,7 +25,7 @@ function buildOrderMessage(order) {
     throw new Error("Order details are invalid for an admin SMS notification.");
   }
 
-  return `New paid order #${orderNumber} from ${customerName || "Customer"}. Total GHS ${total.toFixed(2)}. Check the admin dashboard.`;
+  return `Order has been placed. Order #${orderNumber} from ${customerName || "Customer"}; total GHS ${total.toFixed(2)}. Please check the admin dashboard.`;
 }
 
 export async function sendArkeselAdminOrderSms(order) {
