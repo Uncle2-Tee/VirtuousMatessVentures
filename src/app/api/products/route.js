@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { activeProductCategories, initialProducts, productCategories } from "../../../lib/catalog";
+import { activeProductCategories, initialProducts, mergeProductCategories, productCategories } from "../../../lib/catalog";
 import { isTransientDatabaseError, withDatabaseRetry } from "../../../lib/database-retry";
 import { processExpiredInventoryReservations } from "../../../lib/paystack-payments";
 import { prisma } from "../../../lib/prisma";
