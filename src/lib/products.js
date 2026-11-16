@@ -1,3 +1,5 @@
+export const MAX_PRODUCT_PRICE = 99_999_999.99;
+
 export function productToDatabaseRow(product) {
   return {
     id: product.id,
@@ -47,12 +49,16 @@ export function validProduct(product) {
     product
     && typeof product.id === "string"
     && product.id.trim()
+    && product.id.length <= 100
     && typeof product.name === "string"
     && product.name.trim()
+    && product.name.trim().length <= 200
     && typeof product.category === "string"
     && product.category.trim()
+    && product.category.trim().length <= 50
     && Number.isFinite(Number(product.price))
     && Number(product.price) > 0
+    && Number(product.price) <= MAX_PRODUCT_PRICE
     && Number.isSafeInteger(product.stockQuantity)
     && product.stockQuantity >= 0
     && product.stockQuantity <= 2_147_483_647

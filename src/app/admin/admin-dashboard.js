@@ -10,6 +10,7 @@ import VisibilityOffIcon from "@mui/icons-material/VisibilityOffOutlined";
 import { defaultProductCaution, defaultProductUsage, getProductSizePlaceholder, mergeProductCategories, productCategories } from "../../lib/catalog";
 import { notifyCustomerOrderUpdate } from "../../lib/customer-order-updates";
 import { notifyProductCatalogUpdate } from "../../lib/product-catalog-updates";
+import { MAX_PRODUCT_PRICE } from "../../lib/products";
 import BrandWordmark from "../components/brand-wordmark";
 
 const money = new Intl.NumberFormat("en-GH", { style: "currency", currency: "GHS", minimumFractionDigits: 2 });
@@ -63,6 +64,8 @@ export default function AdminDashboard({ username }) {
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState(productCategories);
   const [form, setForm] = useState(emptyForm);
+  const [addingProduct, setAddingProduct] = useState(false);
+  const addingProductRef = useRef(false);
   const [categoryDraft, setCategoryDraft] = useState("");
   const [categorySaving, setCategorySaving] = useState(false);
   const [categoryRemoving, setCategoryRemoving] = useState("");
@@ -210,11 +213,19 @@ export default function AdminDashboard({ username }) {
 
   async function addProduct(event) {
     event.preventDefault();
+    if (addingProductRef.current) return;
     if (uploadingImage) return;
     if (!databaseReady) return;
     if (!form.image) { setMessage("Upload a product image."); return; }
+    const price = Number(form.price);
+    if (!Number.isFinite(price) || price <= 0 || price > MAX_PRODUCT_PRICE) {
+      setMessage(`Enter a price between GHS 0.01 and GHS ${MAX_PRODUCT_PRICE.toLocaleString("en-GH", { minimumFractionDigits: 2 })}.`);
+      return;
+    }
     const description = form.description.trim() || "A thoughtfully selected piece for everyday style and living.";
-    const product = { id: `${Date.now()}-${form.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`, name: form.name.trim(), category: form.category, price: Number(form.price), size: form.size.trim() || "One size", stockQuantity: Number(form.stockQuantity), image: form.image, description, cardDescription: description, howToUse: form.howToUse.trim() || defaultProductUsage, caution: form.caution.trim() || defaultProductCaution, badge: "Just added" };
+    const product = { id: crypto.randomUUID(), name: form.name.trim(), category: form.category, price, size: form.size.trim() || "One size", stockQuantity: Number(form.stockQuantity), image: form.image, description, cardDescription: description, howToUse: form.howToUse.trim() || defaultProductUsage, caution: form.caution.trim() || defaultProductCaution, badge: "Just added" };
+    addingProductRef.current = true;
+    setAddingProduct(true);
     try {
       const { product: saved } = await readApiResponse(await fetch("/api/admin/products", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ product }) }));
       setProducts((current) => [saved, ...current]);
@@ -222,6 +233,10 @@ export default function AdminDashboard({ username }) {
       setForm(emptyForm);
       setMessage(`${saved.name} has been published.`);
     } catch (error) { setMessage(error.message); }
+    finally {
+      addingProductRef.current = false;
+      setAddingProduct(false);
+    }
   }
 
   async function addCategory(event) {
@@ -541,8 +556,8 @@ export default function AdminDashboard({ username }) {
             <p className="listing-intro">Add the details customers need to discover and shop this product.</p>
             <section className="listing-form-section" aria-labelledby="listing-details-heading">
               <div className="listing-section-heading"><span>01</span><h3 id="listing-details-heading">Product details</h3></div>
-              <label>Product name<input required value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="e.g. Sneakers" /></label>
-              <div className="field-row listing-field-row"><label>Category<select value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })}>{categories.map((category) => <option key={category}>{category}</option>)}</select></label><label>Price (GHS)<input required min="0.01" step="0.01" type="number" value={form.price} onChange={(event) => setForm({ ...form, price: event.target.value })} placeholder="36.00" /></label></div>
+              <label>Product name<input required maxLength={200} value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="e.g. Sneakers" /></label>
+              <div className="field-row listing-field-row"><label>Category<select value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })}>{categories.map((category) => <option key={category}>{category}</option>)}</select></label><label>Price (GHS)<input required min="0.01" max={MAX_PRODUCT_PRICE} step="0.01" type="number" value={form.price} onChange={(event) => setForm({ ...form, price: event.target.value })} placeholder="36.00" /></label></div>
               <div className="field-row listing-field-row"><label>Size<input value={form.size} onChange={(event) => setForm({ ...form, size: event.target.value })} placeholder={getProductSizePlaceholder(form.category)} /></label><label>Stock quantity<input required type="number" min="0" max="2147483647" step="1" value={form.stockQuantity} onChange={(event) => setForm({ ...form, stockQuantity: event.target.value })} placeholder="e.g. 25" /><small>Available units; pending payments reserve stock temporarily.</small></label></div>
               <div className="listing-image-field">
                 <span className="listing-field-label">Product image <span>Required</span></span>
@@ -560,7 +575,7 @@ export default function AdminDashboard({ username }) {
               <div className="listing-section-heading"><span>02</span><h3 id="listing-description-heading">Product description</h3></div>
               <label>Description <span className="listing-field-optional">Optional</span><textarea value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} placeholder="Describe the details that make this product special." /></label>
             </section>
-            <button className="publish-button" type="submit" disabled={!databaseReady || uploadingImage}>{uploadingImage ? "Uploading image…" : "Publish product"} <span aria-hidden="true">→</span></button>
+            <button className="publish-button" type="submit" disabled={!databaseReady || uploadingImage || addingProduct}>{uploadingImage ? "Uploading image…" : addingProduct ? "Publishing…" : "Publish product"} <span aria-hidden="true">→</span></button>
           </div>
         </details>
       </form>

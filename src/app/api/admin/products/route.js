@@ -1,9 +1,11 @@
 import { cookies } from "next/headers";
+import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { ADMIN_SESSION_COOKIE, hasValidAdminSession } from "../../../../lib/admin-auth";
 import { activeProductCategories, productCategories } from "../../../../lib/catalog";
+import { isTransientDatabaseError, withDatabaseRetry } from "../../../../lib/database-retry";
 import { prisma } from "../../../../lib/prisma";
-import { productFromDatabaseRow, productToDatabaseRow, validProduct } from "../../../../lib/products";
+import { MAX_PRODUCT_PRICE, productFromDatabaseRow, productToDatabaseRow, validProduct } from "../../../../lib/products";
 
 export const runtime = "nodejs";
 
@@ -56,18 +58,36 @@ export async function POST(request) {
   } catch {
     return NextResponse.json({ error: "Invalid product data." }, { status: 400 });
   }
+  if (Number.isFinite(Number(product?.price)) && Number(product.price) > MAX_PRODUCT_PRICE) {
+    return NextResponse.json({ error: `Price must not exceed GHS ${MAX_PRODUCT_PRICE.toLocaleString("en-GH", { minimumFractionDigits: 2 })}.` }, { status: 400 });
+  }
   if (!validProduct(product)) return NextResponse.json({ error: "Complete all required product fields with a valid price and stock quantity." }, { status: 400 });
 
   try {
-    if (!(await isActiveCategory(product.category))) {
+    if (!(await withDatabaseRetry(() => isActiveCategory(product.category)))) {
       return NextResponse.json({ error: "Choose an active product category." }, { status: 400 });
     }
-    const first = await prisma.product.findFirst({ orderBy: { sortOrder: "asc" }, select: { sortOrder: true } });
-    const data = productToDatabaseRow({ ...product, sortOrder: (first?.sortOrder ?? 0) - 1 });
-    const saved = await prisma.product.create({ data });
+    const first = await withDatabaseRetry(() =>
+      prisma.product.findFirst({ orderBy: { sortOrder: "asc" }, select: { sortOrder: true } }));
+    const sortOrder = first ? Math.max(first.sortOrder - 1, -2_147_483_648) : -1;
+    const data = productToDatabaseRow({ ...product, sortOrder });
+    const saved = await withDatabaseRetry(() => prisma.product.upsert({
+      where: { id: data.id },
+      create: data,
+      update: { id: data.id },
+    }));
     return NextResponse.json({ product: productFromDatabaseRow(saved) }, { status: 201 });
   } catch (error) {
     console.error("Admin could not create product:", error);
+    if (error?.code === "P2002") {
+      return NextResponse.json({ error: "This product ID is already in use. Please try publishing again." }, { status: 409 });
+    }
+    if (error?.code === "P2000" || error?.code === "P2020") {
+      return NextResponse.json({ error: "One or more product details exceed the database's supported limits." }, { status: 400 });
+    }
+    if (isTransientDatabaseError(error)) {
+      return NextResponse.json({ error: "The database is temporarily unavailable. Your product was not confirmed; please try again." }, { status: 503 });
+    }
     return NextResponse.json({ error: "Could not save the product to the database." }, { status: 500 });
   }
 }
