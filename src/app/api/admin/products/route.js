@@ -2,7 +2,6 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { ADMIN_SESSION_COOKIE, hasValidAdminSession } from "../../../../lib/admin-auth";
 import { activeProductCategories, productCategories } from "../../../../lib/catalog";
-import { processExpiredInventoryReservations } from "../../../../lib/paystack-payments";
 import { prisma } from "../../../../lib/prisma";
 import { productFromDatabaseRow, productToDatabaseRow, validProduct } from "../../../../lib/products";
 
@@ -31,7 +30,6 @@ export async function GET() {
   if (!(await requireAdmin())) return NextResponse.json({ error: "Admin sign-in required." }, { status: 401 });
   if (!process.env.DATABASE_URL) return databaseUnavailable();
   try {
-    await processExpiredInventoryReservations();
     const [products, savedCategories] = await Promise.all([
       prisma.product.findMany({ orderBy: { sortOrder: "asc" } }),
       prisma.productCategory.findMany({

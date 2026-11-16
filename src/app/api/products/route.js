@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { activeProductCategories, initialProducts, mergeProductCategories, productCategories } from "../../../lib/catalog";
 import { isTransientDatabaseError, withDatabaseRetry } from "../../../lib/database-retry";
-import { processExpiredInventoryReservations } from "../../../lib/paystack-payments";
 import { prisma } from "../../../lib/prisma";
 import { productFromDatabaseRow } from "../../../lib/products";
 
@@ -9,7 +8,6 @@ export const runtime = "nodejs";
 
 async function findCatalogueWithRetry() {
   return withDatabaseRetry(async () => {
-    await processExpiredInventoryReservations();
     const products = await prisma.product.findMany({ orderBy: { sortOrder: "asc" } });
     const savedCategories = await prisma.productCategory.findMany({
       orderBy: { createdAt: "asc" },
