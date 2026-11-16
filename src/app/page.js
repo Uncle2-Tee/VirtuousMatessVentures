@@ -26,6 +26,7 @@ import WhatsAppIcon from "@mui/icons-material/WhatsApp";
 import Script from "next/script";
 import { initialProducts, productCategories } from "../lib/catalog";
 import { permanentHomepageBackground, permanentHomepageBackgroundContinuation } from "../lib/homepage-images";
+import { DELIVERY_FEE } from "../lib/pricing";
 import CustomerAccount from "./components/customer-account";
 import BrandWordmark from "./components/brand-wordmark";
 import { getCustomerSession } from "../lib/customer-auth-client";
@@ -350,7 +351,7 @@ export default function Home() {
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
   const wishlistProducts = products.filter((product) => wishlist.includes(product.id));
   const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const shipping = subtotal >= 60 || subtotal === 0 ? 0 : 6;
+  const shipping = DELIVERY_FEE;
   const addToCart = (product) => {
     const stockLimited = Number.isInteger(product.stockQuantity);
     const existing = cart.find((item) => item.id === product.id);

@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { getAuthenticatedUser } from "../../../../lib/customer-auth";
 import { failPaymentAttemptAndReleaseStock, InsufficientStockError, reserveProductStock } from "../../../../lib/inventory";
 import { prisma } from "../../../../lib/prisma";
+import { DELIVERY_FEE } from "../../../../lib/pricing";
 import { getPaystackCallbackUrl, getPaystackSecretKey, initializePaystackTransaction } from "../../../../lib/paystack";
 import { processExpiredInventoryReservations } from "../../../../lib/paystack-payments";
 
@@ -63,7 +64,7 @@ export async function POST(request) {
       };
     });
     const subtotal = Number(orderItems.reduce((sum, item) => sum + item.line_total, 0).toFixed(2));
-    const shipping = subtotal >= 60 ? 0 : 6;
+    const shipping = DELIVERY_FEE;
     const total = Number((subtotal + shipping).toFixed(2));
     const amount = Math.round(total * 100);
     if (!Number.isSafeInteger(amount) || amount < 1) {
