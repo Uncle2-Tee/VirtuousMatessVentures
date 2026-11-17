@@ -4,25 +4,25 @@ import nextEnv from "@next/env";
 
 nextEnv.loadEnvConfig(process.cwd());
 
-if (!process.env.DATABASE_URL) {
-  console.warn("DATABASE_URL is not configured; skipping automatic Prisma schema synchronization.");
-  process.exit(0);
-}
-
 const prismaCommand = process.execPath;
 const prismaScript = path.join(process.cwd(), "node_modules", "prisma", "build", "index.js");
-const schemaArguments = [prismaScript, "db", "push", "--schema", "prisma/schema.prisma"];
 const spawnOptions = { stdio: "inherit" };
-const pushResult = spawnSync(prismaCommand, schemaArguments, spawnOptions);
 
-if (pushResult.error) {
-  console.error("Could not run Prisma schema synchronization:", pushResult.error.message);
-  process.exit(1);
-}
+if (process.env.DATABASE_URL) {
+  const schemaArguments = [prismaScript, "db", "push", "--schema", "prisma/schema.prisma"];
+  const pushResult = spawnSync(prismaCommand, schemaArguments, spawnOptions);
 
-if (pushResult.status !== 0) {
-  console.error("Prisma schema synchronization failed. No automatic data-loss confirmation was supplied.");
-  process.exit(pushResult.status ?? 1);
+  if (pushResult.error) {
+    console.error("Could not run Prisma schema synchronization:", pushResult.error.message);
+    process.exit(1);
+  }
+
+  if (pushResult.status !== 0) {
+    console.error("Prisma schema synchronization failed. No automatic data-loss confirmation was supplied.");
+    process.exit(pushResult.status ?? 1);
+  }
+} else {
+  console.warn("DATABASE_URL is not configured; skipping automatic Prisma schema synchronization.");
 }
 
 const generateResult = spawnSync(prismaCommand, [prismaScript, "generate", "--schema", "prisma/schema.prisma"], spawnOptions);
