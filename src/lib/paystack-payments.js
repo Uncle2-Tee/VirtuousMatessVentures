@@ -1,13 +1,14 @@
 import { after } from "next/server";
 import { sendArkeselAdminOrderSms } from "./arkesel-sms";
+import { withDatabaseRetry } from "./database-retry";
 import { failPaymentAttemptAndReleaseStock } from "./inventory";
 import { prisma } from "./prisma";
 import { verifyPaystackTransaction } from "./paystack";
 
 export async function verifyAndRecordPaystackPayment(reference) {
-  const attempt = await prisma.paymentAttempt.findUnique({
+  const attempt = await withDatabaseRetry(() => prisma.paymentAttempt.findUnique({
     where: { reference },
-  });
+  }));
   if (!attempt) return { verified: false, reason: "unknown_reference" };
   if (attempt.status === "successful") {
     return { verified: true, orderId: attempt.orderId };
@@ -29,7 +30,7 @@ export async function verifyAndRecordPaystackPayment(reference) {
     return { verified: false, reason: "payment_pending" };
   }
 
-  const recordedOrder = await prisma.$transaction(async (database) => {
+  const recordedOrder = await withDatabaseRetry(() => prisma.$transaction(async (database) => {
     const updatedAttempt = await database.paymentAttempt.updateMany({
       where: { id: attempt.id, status: "pending" },
       data: { status: "successful", reservationExpiresAt: null },
@@ -96,7 +97,7 @@ export async function verifyAndRecordPaystackPayment(reference) {
       orderId: order.id,
       notification: { id: order.id, customerName: order.customerName, total: order.total },
     };
-  });
+  }));
 
   if (recordedOrder.notification) {
     after(async () => {

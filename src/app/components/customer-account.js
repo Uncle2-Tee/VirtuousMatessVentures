@@ -505,9 +505,11 @@ export default function CustomerAccount({ session, authChecked, onSignInSuccess,
           {ordersError && <p className="customer-account-notice" role="alert">{ordersError}</p>}
           {!ordersError && orders?.length === 0 && <div className="account-empty"><p className="eyebrow">Orders</p><h2>No orders yet</h2><p>Your placed orders will appear here.</p></div>}
           {(orders || []).map((order) => <article className="customer-order-card" key={order.id}>
-            <div className="customer-order-heading"><div><span>Placed {formatDate(order.created_at)}</span><strong>{order.status.replaceAll("_", " ")}</strong></div><b>{new Intl.NumberFormat("en-GH", { style: "currency", currency: "GHS" }).format(Number(order.total))}</b></div>
+            <div className="customer-order-heading"><b>{new Intl.NumberFormat("en-GH", { style: "currency", currency: "GHS" }).format(Number(order.total))}</b><div><span className="customer-order-date"><span>Placed</span><time dateTime={order.created_at}>{formatDate(order.created_at)}</time></span>{order.status !== "delivered" && <strong>{order.status.replaceAll("_", " ")}</strong>}</div></div>
             <ul>{order.items.map((item) => <li key={`${order.id}-${item.product_id}`}>{item.name} × {item.quantity}</li>)}</ul>
-            <p className="customer-order-payment">{order.payment_method === "paystack" ? order.status === "payment_review" ? "Paystack payment verified · Awaiting order processing" : "Paystack payment is awaiting completion" : "Awaiting manual payment verification"}</p>
+            {order.payment_method === "paystack"
+              ? order.status === "payment_review" && <p className="customer-order-payment">Paystack payment verified · Awaiting order processing</p>
+              : <p className="customer-order-payment">Awaiting manual payment verification</p>}
           </article>)}
         </section>}
         {activeSection === "wishlist" && <section>

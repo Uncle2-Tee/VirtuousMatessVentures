@@ -30,7 +30,13 @@ export async function POST(request) {
 
     const result = await verifyAndRecordPaystackPayment(reference);
     if (!result.verified) {
-      return NextResponse.json({ error: "Payment has not been verified yet." }, { status: 409 });
+      if (result.reason === "payment_failed") {
+        return NextResponse.json({ error: "The payment was not completed." }, { status: 402 });
+      }
+      if (result.reason === "payment_pending") {
+        return NextResponse.json({ error: "Payment is still processing.", retryable: true }, { status: 409 });
+      }
+      return NextResponse.json({ error: "Payment could not be verified." }, { status: 409 });
     }
     return NextResponse.json({ verified: true });
   } catch (error) {

@@ -8,14 +8,12 @@ import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlineOutlined";
 import VisibilityIcon from "@mui/icons-material/VisibilityOutlined";
 import VisibilityOffIcon from "@mui/icons-material/VisibilityOffOutlined";
 import { defaultProductCaution, defaultProductUsage, getProductSizePlaceholder, mergeProductCategories, productCategories } from "../../lib/catalog";
-import { notifyCustomerOrderUpdate } from "../../lib/customer-order-updates";
 import { notifyProductCatalogUpdate } from "../../lib/product-catalog-updates";
 import { MAX_PRODUCT_PRICE } from "../../lib/products";
 import BrandWordmark from "../components/brand-wordmark";
 
 const money = new Intl.NumberFormat("en-GH", { style: "currency", currency: "GHS", minimumFractionDigits: 2 });
 const emptyForm = { name: "", category: "Dresses", price: "", size: "", stockQuantity: "", image: "", description: "", howToUse: defaultProductUsage, caution: defaultProductCaution };
-const orderStatuses = ["awaiting_payment", "payment_review", "processing", "shipped", "delivered", "cancelled"];
 
 function timeBasedGreeting() {
   const hour = new Date().getHours();
@@ -85,7 +83,6 @@ export default function AdminDashboard({ username }) {
   const [paymentReceiptsError, setPaymentReceiptsError] = useState("");
   const [ordersError, setOrdersError] = useState("");
   const [ordersLoading, setOrdersLoading] = useState(true);
-  const [orderMessage, setOrderMessage] = useState("");
   const [newOrders, setNewOrders] = useState([]);
   const [passwordPanelOpen, setPasswordPanelOpen] = useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
@@ -169,12 +166,6 @@ export default function AdminDashboard({ username }) {
       window.removeEventListener("focus", onFocus);
     };
   }, []);
-
-  useEffect(() => {
-    if (!orderMessage) return undefined;
-    const timer = window.setTimeout(() => setOrderMessage(""), 4000);
-    return () => window.clearTimeout(timer);
-  }, [orderMessage]);
 
   useEffect(() => {
     let cancelled = false;
@@ -386,24 +377,6 @@ export default function AdminDashboard({ username }) {
     }
   }
 
-  async function updateOrderStatus(order, status) {
-    const previousStatus = order.status;
-    setOrders((current) => current.map((item) => item.id === order.id ? { ...item, status } : item));
-    try {
-      const { order: savedOrder } = await readApiResponse(await fetch("/api/admin/orders", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orderId: order.id, status }),
-      }));
-      setOrders((current) => current.map((item) => item.id === savedOrder.id ? savedOrder : item));
-      notifyCustomerOrderUpdate();
-      setOrderMessage(`Order status updated to ${status.replaceAll("_", " ")}.`);
-    } catch (error) {
-      setOrders((current) => current.map((item) => item.id === order.id ? { ...item, status: previousStatus } : item));
-      setOrderMessage(error.message || "Could not update order status.");
-    }
-  }
-
   async function signOut() {
     await fetch("/api/admin/session", { method: "DELETE" });
     router.replace("/admin");
@@ -491,16 +464,15 @@ export default function AdminDashboard({ username }) {
       <div className="admin-dropdown-content" id="orders-panel-content">
         <p className="orders-panel-description">New orders are checked every 30 seconds while the dashboard is open.</p>
       {newOrders.length > 0 && <div className="new-orders-alert" role="status"><div><strong>{newOrders.length === 1 ? "New order received" : `${newOrders.length} new orders received`}</strong><span>{newOrders[0].customer_name} · {money.format(Number(newOrders[0].total))}</span></div><button type="button" onClick={() => setNewOrders([])}>Mark as seen</button></div>}
-      {orderMessage && <p className="orders-message" role="status">{orderMessage}</p>}
       {ordersError && <p className="database-warning orders-error" role="alert">{ordersError}</p>}
       {ordersLoading && orders.length === 0 && <p className="orders-empty">Loading orders…</p>}
       {!ordersLoading && !ordersError && orders.length === 0 && <p className="orders-empty">No orders yet. New customer orders will appear here automatically.</p>}
       {orders.length > 0 && <div className="admin-orders-list">{orders.map((order) => (
         <article className="admin-order-card" key={order.id}>
-          <div className="admin-order-top"><div><p className="admin-order-number">Order #{order.id.slice(0, 8).toUpperCase()}</p><time dateTime={order.created_at}>{new Intl.DateTimeFormat("en-GH", { dateStyle: "medium", timeStyle: "short" }).format(new Date(order.created_at))}</time></div><strong className={`admin-order-status status-${order.status}`}>{order.status.replaceAll("_", " ")}</strong></div>
+          <div className="admin-order-top"><div><p className="admin-order-number">Order #{order.id.slice(0, 8).toUpperCase()}</p><time dateTime={order.created_at}>{new Intl.DateTimeFormat("en-GH", { dateStyle: "medium", timeStyle: "short" }).format(new Date(order.created_at))}</time></div></div>
           <div className="admin-order-customer"><strong>{order.customer_name}</strong>{order.customer_email && <a href={`mailto:${order.customer_email}`}>{order.customer_email}</a>}<a href={`tel:${order.phone}`}>{order.phone}</a></div>
           <ul className="admin-order-items">{(Array.isArray(order.items) ? order.items : []).map((item, index) => <li key={`${order.id}-${item.product_id || item.name}-${index}`}><span>{item.name} × {item.quantity}</span><strong>{money.format(Number(item.line_total ?? Number(item.price) * Number(item.quantity)))}</strong></li>)}</ul>
-          <div className="admin-order-bottom"><div><span>Delivery address & city / town</span><p>{order.shipping_address}</p><small>Payment: Mobile Money · {money.format(Number(order.total))}</small></div><label>Status<select aria-label={`Update status for order ${order.id.slice(0, 8)}`} value={order.status} onChange={(event) => updateOrderStatus(order, event.target.value)}>{orderStatuses.map((status) => <option key={status} value={status}>{status.replaceAll("_", " ")}</option>)}</select></label></div>
+          <div className="admin-order-bottom"><div><span>Delivery address & city / town</span><p>{order.shipping_address}</p><small>Payment: Mobile Money · {money.format(Number(order.total))}</small></div></div>
         </article>
       ))}</div>}
       </div>

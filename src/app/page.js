@@ -53,6 +53,37 @@ function Icon({ name, size = 20 }) {
   return <IconComponent sx={{ fontSize: size }} aria-hidden="true" focusable="false" />;
 }
 
+async function verifyPaymentWithRetry(reference) {
+  const retryDelays = [0, 1000, 3000];
+  let lastError;
+  for (let attempt = 0; attempt < retryDelays.length; attempt += 1) {
+    if (retryDelays[attempt] > 0) {
+      await new Promise((resolve) => window.setTimeout(resolve, retryDelays[attempt]));
+    }
+
+    let response;
+    try {
+      response = await fetch("/api/paystack/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reference }),
+      });
+    } catch (error) {
+      lastError = error;
+      if (attempt === retryDelays.length - 1) throw error;
+      continue;
+    }
+
+    const verification = await response.json().catch(() => ({}));
+    if (response.ok && verification.verified === true) return verification;
+
+    lastError = new Error(verification.error || "Payment verification is still pending.");
+    const retryable = response.status === 503 || (response.status === 409 && verification.retryable === true);
+    if (!retryable || attempt === retryDelays.length - 1) throw lastError;
+  }
+  throw lastError;
+}
+
 function ProductCard({ product, onAdd, onPreview, isWishlisted, onToggleWishlist }) {
   const outOfStock = Number.isInteger(product.stockQuantity) && product.stockQuantity <= 0;
   return <article className="product-card"><div className="product-card-visual"><button className="product-image" onClick={() => onPreview(product)} aria-label={`View ${product.name}`}><span className="product-photo" style={{ backgroundImage: `url(${product.image})` }} />{product.badge && <span className="product-badge">{product.badge}</span>}<span className="quick-add">Quick view <Icon name="arrow" size={15} /></span></button><button className={`wishlist-toggle${isWishlisted ? " active" : ""}`} onClick={() => onToggleWishlist(product)} aria-label={isWishlisted ? `Remove ${product.name} from wishlist` : `Add ${product.name} to wishlist`} aria-pressed={isWishlisted}><Icon name={isWishlisted ? "favorite" : "heart"} size={19} /></button></div><div className="product-info"><div><p className="eyebrow product-card-meta"><span>{product.category}</span>{Number.isInteger(product.stockQuantity) && <span className="product-stock-count" aria-label={`${product.stockQuantity} ${product.stockQuantity === 1 ? "unit" : "units"} available`}><span aria-hidden="true">·</span> {product.stockQuantity} {product.stockQuantity === 1 ? "unit" : "units"}</span>}</p><h3>{product.name}</h3></div><p className="product-price">{money.format(product.price)}</p></div><button className="add-to-cart-button" onClick={() => onAdd(product)} disabled={outOfStock}>{outOfStock ? "Out of stock" : <>Add to cart <Icon name="plus" size={16} /></>}</button></article>;
@@ -479,15 +510,7 @@ export default function Home() {
           }
 
           try {
-            const verificationResponse = await fetch("/api/paystack/verify", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ reference: transaction.reference }),
-            });
-            const verification = await verificationResponse.json().catch(() => ({}));
-            if (!verificationResponse.ok || verification.verified !== true) {
-              throw new Error(verification.error || "Payment verification is still pending.");
-            }
+            await verifyPaymentWithRetry(transaction.reference);
             notifyProductCatalogUpdate();
             setCart([]);
             setOrdersVersion((version) => version + 1);
