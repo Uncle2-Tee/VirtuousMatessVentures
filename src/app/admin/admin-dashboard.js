@@ -14,6 +14,7 @@ import BrandWordmark from "../components/brand-wordmark";
 
 const money = new Intl.NumberFormat("en-GH", { style: "currency", currency: "GHS", minimumFractionDigits: 2 });
 const emptyForm = { name: "", category: "Dresses", price: "", size: "", stockQuantity: "", image: "", description: "", howToUse: defaultProductUsage, caution: defaultProductCaution };
+const LOW_STOCK_THRESHOLD = 5;
 
 function timeBasedGreeting() {
   const hour = new Date().getHours();
@@ -78,12 +79,16 @@ export default function AdminDashboard({ username }) {
   const [message, setMessage] = useState("");
   const [uploadingImage, setUploadingImage] = useState(false);
   const [databaseReady, setDatabaseReady] = useState(false);
+  const [stockRefreshError, setStockRefreshError] = useState("");
   const [orders, setOrders] = useState([]);
   const [paymentReceipts, setPaymentReceipts] = useState(null);
   const [paymentReceiptsError, setPaymentReceiptsError] = useState("");
   const [ordersError, setOrdersError] = useState("");
   const [ordersLoading, setOrdersLoading] = useState(true);
   const [newOrders, setNewOrders] = useState([]);
+  const [recordedSales, setRecordedSales] = useState([]);
+  const [salesToday, setSalesToday] = useState(null);
+  const [salesReportError, setSalesReportError] = useState("");
   const [passwordPanelOpen, setPasswordPanelOpen] = useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -95,14 +100,19 @@ export default function AdminDashboard({ username }) {
   const [passwordFeedback, setPasswordFeedback] = useState(null);
   const knownOrderIds = useRef(new Set());
   const initialOrdersLoaded = useRef(false);
+  const knownLowStockProductIds = useRef(null);
   const router = useRouter();
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/admin/products", { cache: "no-store" })
-      .then(readApiResponse)
-      .then(({ products: saved, categories: savedCategories }) => {
+    let requestInFlight = false;
+    async function loadCatalogue() {
+      if (requestInFlight) return;
+      requestInFlight = true;
+      try {
+        const { products: saved, categories: savedCategories } = await readApiResponse(await fetch("/api/admin/products", { cache: "no-store" }));
         if (cancelled) return;
+        if (!Array.isArray(saved)) throw new Error("The product inventory response is invalid.");
         if (!Array.isArray(savedCategories)) throw new Error("The product categories response is invalid.");
         const availableCategories = mergeProductCategories(productCategories, savedCategories);
         setProducts(saved);
@@ -111,15 +121,41 @@ export default function AdminDashboard({ username }) {
           ? current
           : { ...current, category: availableCategories[0] || "" });
         setDatabaseReady(true);
-      })
-      .catch((error) => {
-        if (!cancelled) {
+        setStockRefreshError("");
+
+        const lowStockProducts = saved.filter((product) => product.stockQuantity <= LOW_STOCK_THRESHOLD);
+        const previousLowStockProductIds = knownLowStockProductIds.current;
+        knownLowStockProductIds.current = new Set(lowStockProducts.map((product) => product.id));
+        const newlyLowStockProducts = previousLowStockProductIds
+          ? lowStockProducts.filter((product) => !previousLowStockProductIds.has(product.id))
+          : [];
+        if (newlyLowStockProducts.length && typeof Notification !== "undefined" && Notification.permission === "granted") {
+          new Notification(newlyLowStockProducts.length === 1 ? "Low stock alert" : `${newlyLowStockProducts.length} low stock alerts`, {
+            body: newlyLowStockProducts.map((product) => `${product.name}: ${product.stockQuantity} ${product.stockQuantity === 1 ? "unit" : "units"} left`).join("\n"),
+            tag: "virtuous-matess-ventures-low-stock",
+          });
+        }
+      } catch (error) {
+        if (!cancelled && knownLowStockProductIds.current === null) {
           setDatabaseReady(false);
           setMessage(error.message);
+        } else if (!cancelled) {
+          setStockRefreshError(error.message || "Could not refresh inventory.");
         }
-      })
-      .finally(() => { if (!cancelled) setCatalogueLoading(false); });
-    return () => { cancelled = true; };
+      } finally {
+        requestInFlight = false;
+        if (!cancelled) setCatalogueLoading(false);
+      }
+    }
+    void loadCatalogue();
+    const interval = window.setInterval(loadCatalogue, 30_000);
+    const onFocus = () => { void loadCatalogue(); };
+    window.addEventListener("focus", onFocus);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+      window.removeEventListener("focus", onFocus);
+    };
   }, [catalogueRetryKey]);
 
   useEffect(() => {
@@ -159,6 +195,38 @@ export default function AdminDashboard({ username }) {
     void loadOrders();
     const interval = window.setInterval(loadOrders, 30_000);
     const onFocus = () => { void loadOrders(); };
+    window.addEventListener("focus", onFocus);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    let requestInFlight = false;
+    async function loadRecordedSales() {
+      if (requestInFlight) return;
+      requestInFlight = true;
+      try {
+        const { sales: savedSales, today } = await readApiResponse(await fetch("/api/admin/sales", { cache: "no-store" }));
+        if (cancelled) return;
+        if (!Array.isArray(savedSales) || !today || !Number.isFinite(today.revenue) || !Number.isSafeInteger(today.count)) {
+          throw new Error("The in-store sales report response is invalid.");
+        }
+        setRecordedSales(savedSales);
+        setSalesToday(today);
+        setSalesReportError("");
+      } catch (error) {
+        if (!cancelled) setSalesReportError(error.message || "Could not load in-store sales.");
+      } finally {
+        requestInFlight = false;
+      }
+    }
+    void loadRecordedSales();
+    const interval = window.setInterval(loadRecordedSales, 30_000);
+    const onFocus = () => { void loadRecordedSales(); };
     window.addEventListener("focus", onFocus);
     return () => {
       cancelled = true;
@@ -426,6 +494,10 @@ export default function AdminDashboard({ username }) {
     }
   }
 
+  const lowStockProducts = products
+    .filter((product) => product.stockQuantity <= LOW_STOCK_THRESHOLD)
+    .sort((first, second) => first.stockQuantity - second.stockQuantity);
+
   return <main className="dashboard-shell">
     <header className="dashboard-header"><div className="dashboard-brand-logo"><BrandWordmark /></div><div className="dashboard-header-actions"><span className="secure-status">● Signed in as {username}</span><button type="button" className="dashboard-password-toggle" onClick={togglePasswordPanel} aria-expanded={passwordPanelOpen} aria-controls="admin-password-panel"><LockResetIcon fontSize="small" aria-hidden="true" />Change password</button><button onClick={signOut}>Sign out</button></div></header>
     {passwordPanelOpen && <section className="admin-password-panel" id="admin-password-panel" aria-labelledby="admin-password-heading">
@@ -454,8 +526,23 @@ export default function AdminDashboard({ username }) {
     </section>}
     <section className="dashboard-heading"><p className="atelier-kicker">Store administration</p><h1>{greeting}</h1><p>Keep your collection polished, current, and ready to shop.</p></section>
     {message && !databaseReady && <p className="database-warning" role="alert">{message} Check DATABASE_URL in your environment and run `npx prisma db push` if the schema has not been applied.</p>}
-    <section className="dashboard-overview-grid" aria-label="Customer activity, payment receipts, new listing, and live catalogue">
+    <section className="dashboard-overview-grid" aria-label="Inventory alerts, customer activity, payment receipts, new listing, and live catalogue">
       <div className="dashboard-overview-left">
+      {stockRefreshError && <p className="database-warning" role="alert">Inventory could not be refreshed. The displayed stock may be out of date. {stockRefreshError}</p>}
+      {lowStockProducts.length > 0 && <section className="low-stock-panel" aria-labelledby="low-stock-heading" role="status">
+        <div className="low-stock-panel-heading"><div><p className="atelier-kicker">Inventory alert</p><h2 id="low-stock-heading">{lowStockProducts.length} {lowStockProducts.length === 1 ? "product needs" : "products need"} restocking</h2></div><span>At or below {LOW_STOCK_THRESHOLD} units</span></div>
+        <ul className="low-stock-list">{lowStockProducts.map((product) => <li key={product.id}><strong>{product.name}</strong><span className={product.stockQuantity === 0 ? "out-of-stock" : ""}>{product.stockQuantity === 0 ? "Out of stock" : `${product.stockQuantity} ${product.stockQuantity === 1 ? "unit" : "units"} left`}</span></li>)}</ul>
+        <p>Inventory refreshes every 30 seconds while this dashboard is open.</p>
+      </section>}
+      <section className="sales-report-panel" aria-labelledby="sales-report-heading">
+        <div className="sales-report-heading"><div><p className="atelier-kicker">Point-of-sale activity</p><h2 id="sales-report-heading">In-store sales</h2></div><div className="sales-report-today"><span>Today</span><strong>{salesToday ? money.format(salesToday.revenue) : "—"}</strong><small>{salesToday ? `${salesToday.count} ${salesToday.count === 1 ? "sale" : "sales"}` : "Sales total"}</small></div></div>
+        {salesReportError ? <p className="sales-report-error" role="alert">{salesReportError}</p>
+          : recordedSales.length ? <div className="sales-report-list">{recordedSales.slice(0, 8).map((sale) => <article key={sale.id}>
+            <div><strong>#{sale.id.slice(0, 8).toUpperCase()}</strong><span>{sale.salesperson} · {new Intl.DateTimeFormat("en-GH", { dateStyle: "medium", timeStyle: "short" }).format(new Date(sale.created_at))}</span><small>{Array.isArray(sale.items) ? sale.items.map((item) => `${item.name} × ${item.quantity}`).join(", ") : "Sale items unavailable"} · {sale.payment_method.replaceAll("_", " ")}</small></div><b>{money.format(sale.subtotal)}</b>
+          </article>)}</div>
+            : <p className="sales-report-empty">No in-store sales have been recorded yet.</p>}
+        <p className="sales-report-note">Sales are recorded by staff and inventory is deducted automatically. Refreshes every 30 seconds.</p>
+      </section>
       <details className="orders-panel admin-dropdown-card">
       <summary className="orders-panel-heading admin-dropdown-summary" tabIndex={-1}>
         <span className="orders-panel-heading-copy"><span className="atelier-kicker">Customer activity</span><strong id="orders-heading">Orders <span className="orders-count">{orders.length}</span></strong></span>

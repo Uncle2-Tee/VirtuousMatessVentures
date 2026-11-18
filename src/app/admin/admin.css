@@ -718,6 +718,95 @@
 .catalog-image { border-color:var(--atelier-line); }
 .admin-order-card { border-left-color:var(--atelier-orange); }
 .secure-status { color:#4f7a43; }
+.low-stock-panel {
+  padding:20px 22px;
+  border:1px solid rgba(194,65,12,.28);
+  border-radius:14px;
+  background:linear-gradient(135deg,#fff4ea,#fffaf5 76%);
+  box-shadow:0 8px 28px rgba(17,17,17,.05);
+  color:#7c2d12;
+}
+.low-stock-panel-heading {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:14px;
+  padding-bottom:14px;
+  border-bottom:1px solid rgba(194,65,12,.2);
+}
+.low-stock-panel-heading .atelier-kicker {
+  margin:0 0 7px;
+  color:#c2410c;
+}
+.low-stock-panel-heading h2 {
+  margin:0;
+  font:400 23px/1.1 Georgia,serif;
+  letter-spacing:-.04em;
+}
+.low-stock-panel-heading>span {
+  flex:none;
+  font-size:10px;
+  font-weight:600;
+  letter-spacing:.04em;
+  text-align:right;
+}
+.low-stock-list {
+  margin:0;
+  padding:0;
+  list-style:none;
+}
+.low-stock-list li {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  padding:11px 0;
+  border-bottom:1px solid rgba(194,65,12,.12);
+  font-size:12px;
+}
+.low-stock-list li:last-child { border-bottom:0; }
+.low-stock-list li>span { font-weight:600; text-align:right; }
+.low-stock-list .out-of-stock { color:#b42318; }
+.low-stock-panel>p {
+  margin:11px 0 0;
+  color:#8a5a43;
+  font-size:10px;
+  line-height:1.5;
+}
+@media (max-width:480px) {
+  .low-stock-panel { padding:18px; }
+  .low-stock-panel-heading { align-items:flex-start; flex-direction:column; }
+  .low-stock-panel-heading>span { text-align:left; }
+}
+.sales-report-panel {
+  padding:21px 22px;
+  border:1px solid var(--atelier-line);
+  border-radius:14px;
+  background:var(--atelier-gradient-card);
+  box-shadow:0 8px 28px rgba(17,17,17,.05);
+}
+.sales-report-heading {
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:15px;
+  padding-bottom:14px;
+  border-bottom:1px solid var(--atelier-line);
+}
+.sales-report-heading .atelier-kicker { margin:0 0 7px; color:var(--atelier-orange-dark); }
+.sales-report-heading h2 { margin:0; font:400 25px/1 Georgia,serif; letter-spacing:-.04em; }
+.sales-report-today { display:grid; gap:4px; text-align:right; }
+.sales-report-today span,.sales-report-today small { color:var(--atelier-muted); font-size:9px; }
+.sales-report-today strong { font:400 19px Georgia,serif; }
+.sales-report-list { max-height:330px; overflow:auto; }
+.sales-report-list article { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 0; border-bottom:1px solid var(--atelier-line); }
+.sales-report-list article:last-child { border-bottom:0; }
+.sales-report-list article>div { min-width:0; display:grid; gap:4px; }
+.sales-report-list article>div>strong { font-size:10px; letter-spacing:.04em; }
+.sales-report-list article>div>span,.sales-report-list article>div>small { overflow:hidden; color:var(--atelier-muted); font-size:9px; text-overflow:ellipsis; white-space:nowrap; }
+.sales-report-list article>b { flex:none; font-size:10px; }
+.sales-report-note,.sales-report-empty,.sales-report-error { margin:12px 0 0; color:var(--atelier-muted); font-size:10px; line-height:1.5; }
+.sales-report-error { color:#b42318; }
 
 .category-create-form {
   display:grid;

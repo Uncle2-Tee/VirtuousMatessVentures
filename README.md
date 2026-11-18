@@ -47,6 +47,20 @@ After applying the schema, admins can change their password from the dashboard. 
 
 On Vercel or another serverless host, add these variables in the project’s production environment settings. The admin username and password never reach the browser as configuration values. A successful sign-in creates an HMAC-signed, HTTP-only, SameSite-Strict session cookie containing the signed-in username; it expires after eight hours, and production cookies are HTTPS-only.
 
+## Sales desk
+
+The private salesperson workspace is available at `/sales`. Configure a dedicated shared sales login using `SALES_USERNAME` and `SALES_PASSWORD` in `.env.local` for local development and in the hosting provider's environment for production. Sales sessions use the existing `ADMIN_SESSION_SECRET`; no admin credentials are shared with the sales account. Restart the app after changing environment variables.
+
+Sales staff can search the live catalogue, record counter sales paid by cash, Mobile Money, or card, and see recent transactions and daily totals. Each sale records the signed-in salesperson, snapshots item names and prices, and deducts inventory atomically; insufficient stock prevents the sale. Admins can review recent in-store sales and daily totals on `/admin`. The `sales_transactions` table is included in the Prisma schema and row-level-security setup. Apply the schema and RLS update before using the sales desk:
+
+```bash
+npx prisma db push
+npx prisma generate
+npx prisma db execute --schema prisma/schema.prisma --file prisma/enable-rls.sql
+```
+
+The sales dashboard and sign-in route are excluded from search indexing. Sales access is protected by a separate HTTP-only, SameSite-Strict, eight-hour session cookie. The configured sales password is server-only and is never sent to the browser.
+
 ## Database-backed store
 
 Products, product images, customer profiles, sessions, carts, wishlists, orders, payment attempts, and authentication throttles are stored in PostgreSQL. Customer sign-up and login use database-backed accounts with scrypt-hashed passwords and HTTP-only session cookies. Login applies a 15-minute account lockout after five failed attempts and a 15-minute, 20-attempt IP limit. Phone sign-in requires both the account password and a fresh SMS verification code before a session is created; email sign-in continues to use the password. Email-based password recovery is not available until an email delivery provider is configured. Delivery is free; no shipping fee is added to product or checkout totals. Checkout calculates totals on the server and opens Paystack's secure inline popup without navigating away from the storefront. It stores a payment attempt, but creates an order-history record only after server-side payment verification succeeds, so canceled or failed checkouts do not appear in My Orders. Paystack callbacks and signed webhooks are supported; card details are handled by Paystack and are never collected by this app.

@@ -60,6 +60,19 @@ model Order {
   @@map("orders")
 }
 
+model SalesTransaction {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  salesperson   String
+  paymentMethod String   @map("payment_method")
+  items         Json     @db.JsonB
+  subtotal      Decimal  @db.Decimal(10, 2)
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([createdAt])
+  @@index([salesperson, createdAt])
+  @@map("sales_transactions")
+}
+
 model PaymentAttempt {
   id                   String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   orderId              String?  @map("order_id") @db.Uuid
