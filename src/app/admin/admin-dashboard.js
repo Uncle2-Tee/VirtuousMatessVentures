@@ -9,7 +9,7 @@ import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlineOutlined";
 import VisibilityIcon from "@mui/icons-material/VisibilityOutlined";
 import VisibilityOffIcon from "@mui/icons-material/VisibilityOffOutlined";
 import { defaultProductCaution, defaultProductUsage, getProductSizePlaceholder, mergeProductCategories, productCategories } from "../../lib/catalog";
-import { notifyProductCatalogUpdate } from "../../lib/product-catalog-updates";
+import { notifyProductCatalogUpdate, subscribeToProductCatalogUpdates } from "../../lib/product-catalog-updates";
 import { MAX_PRODUCT_PRICE } from "../../lib/products";
 import BrandWordmark from "../components/brand-wordmark";
 
@@ -142,12 +142,14 @@ export default function AdminDashboard({ username }) {
     const refreshWhenVisible = () => {
       if (document.visibilityState === "visible") void loadCatalogue();
     };
+    const unsubscribeFromProductUpdates = subscribeToProductCatalogUpdates(refreshWhenVisible);
     const interval = window.setInterval(refreshWhenVisible, DASHBOARD_REFRESH_INTERVAL_MS);
     const onFocus = refreshWhenVisible;
     window.addEventListener("focus", onFocus);
     document.addEventListener("visibilitychange", refreshWhenVisible);
     return () => {
       cancelled = true;
+      unsubscribeFromProductUpdates();
       window.clearInterval(interval);
       window.removeEventListener("focus", onFocus);
       document.removeEventListener("visibilitychange", refreshWhenVisible);

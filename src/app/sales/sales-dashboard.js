@@ -20,36 +20,48 @@ function formatSaleTime(value) {
   return new Intl.DateTimeFormat("en-GH", { hour: "numeric", minute: "2-digit" }).format(new Date(value));
 }
 
-function SaleReceipt({ sale, onClose, onPrint }) {
+function SaleReceiptCopy({ sale, headingId }) {
   const receiptNumber = sale.id.slice(0, 8).toUpperCase();
   const issuedAt = new Intl.DateTimeFormat("en-GH", { dateStyle: "medium", timeStyle: "short" }).format(new Date(sale.created_at));
 
+  return <div className="sales-receipt-content">
+    <header className="sales-receipt-header">
+      <div className="sales-receipt-branding">
+        <BrandWordmark className="sales-receipt-logo" />
+        <div><p className="sales-eyebrow">Virtuous Matess Ventures</p><h2 id={headingId}>Sales receipt</h2></div>
+      </div>
+      <div className="sales-receipt-number"><span>Receipt</span><strong>#{receiptNumber}</strong></div>
+    </header>
+    <div className="sales-receipt-meta">
+      <div><span>Date &amp; time</span><time dateTime={sale.created_at}>{issuedAt}</time></div>
+      <div><span>Issued by</span><strong>{sale.salesperson}</strong></div>
+      <div><span>Payment method</span><strong>{paymentLabels[sale.payment_method] || sale.payment_method}</strong></div>
+    </div>
+    <div className="sales-receipt-table-wrap">
+      <table className="sales-receipt-table">
+        <thead><tr><th>Item</th><th className="sales-receipt-quantity">Qty</th><th className="sales-receipt-amount">Unit price</th><th className="sales-receipt-amount">Amount</th></tr></thead>
+        <tbody>{sale.items.map((item, index) => (
+          <tr key={`${item.product_id || item.name}-${index}`}>
+            <td>{item.name}{item.size ? <small>{item.size}</small> : null}</td>
+            <td className="sales-receipt-quantity">{quantityFormatter.format(item.quantity)}</td>
+            <td className="sales-receipt-amount">{money.format(Number(item.price))}</td>
+            <td className="sales-receipt-amount">{money.format(Number(item.line_total))}</td>
+          </tr>
+        ))}</tbody>
+      </table>
+    </div>
+    <div className="sales-receipt-total"><span>Total paid</span><strong>{money.format(sale.subtotal)}</strong></div>
+    <p className="sales-receipt-thanks">Thank you for shopping with us.</p>
+  </div>;
+}
+
+function SaleReceipt({ sale, onClose, onPrint }) {
   return <section className="sales-receipt-panel" aria-labelledby="sales-receipt-heading">
-    <div className="sales-receipt-content">
-      <header className="sales-receipt-header">
-        <div><p className="sales-eyebrow">Virtuous Matess Ventures</p><h2 id="sales-receipt-heading">Sales receipt</h2></div>
-        <div className="sales-receipt-number"><span>Receipt</span><strong>#{receiptNumber}</strong></div>
-      </header>
-      <div className="sales-receipt-meta">
-        <div><span>Date &amp; time</span><time dateTime={sale.created_at}>{issuedAt}</time></div>
-        <div><span>Issued by</span><strong>{sale.salesperson}</strong></div>
-        <div><span>Payment method</span><strong>{paymentLabels[sale.payment_method] || sale.payment_method}</strong></div>
-      </div>
-      <div className="sales-receipt-table-wrap">
-        <table className="sales-receipt-table">
-          <thead><tr><th>Item</th><th className="sales-receipt-quantity">Qty</th><th className="sales-receipt-amount">Unit price</th><th className="sales-receipt-amount">Amount</th></tr></thead>
-          <tbody>{sale.items.map((item, index) => (
-            <tr key={`${item.product_id || item.name}-${index}`}>
-              <td>{item.name}{item.size ? <small>{item.size}</small> : null}</td>
-              <td className="sales-receipt-quantity">{quantityFormatter.format(item.quantity)}</td>
-              <td className="sales-receipt-amount">{money.format(Number(item.price))}</td>
-              <td className="sales-receipt-amount">{money.format(Number(item.line_total))}</td>
-            </tr>
-          ))}</tbody>
-        </table>
-      </div>
-      <div className="sales-receipt-total"><span>Total paid</span><strong>{money.format(sale.subtotal)}</strong></div>
-      <p className="sales-receipt-thanks">Thank you for shopping with us.</p>
+    <SaleReceiptCopy sale={sale} headingId="sales-receipt-heading" />
+    <div className="sales-receipt-print-sheet" aria-hidden="true">
+      <article className="sales-receipt-print-copy"><SaleReceiptCopy sale={sale} /></article>
+      <div className="sales-receipt-perforation"><span>Cut here</span></div>
+      <article className="sales-receipt-print-copy"><SaleReceiptCopy sale={sale} /></article>
     </div>
     <div className="sales-receipt-actions">
       <button type="button" className="sales-receipt-print" onClick={onPrint}>Print receipt</button>
