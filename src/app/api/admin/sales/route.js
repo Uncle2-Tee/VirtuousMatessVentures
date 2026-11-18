@@ -17,27 +17,35 @@ export async function GET() {
   try {
     const startOfDay = new Date();
     startOfDay.setUTCHours(0, 0, 0, 0);
-    const [todaySales, recentSales] = await Promise.all([
+    const [todaySales, recentSales, products] = await Promise.all([
       prisma.salesTransaction.aggregate({
         where: { createdAt: { gte: startOfDay } },
         _count: { _all: true },
         _sum: { subtotal: true },
       }),
-      prisma.salesTransaction.findMany({ orderBy: { createdAt: "desc" }, take: 25 }),
+      prisma.salesTransaction.findMany({ orderBy: { createdAt: "desc" } }),
+      prisma.product.findMany({
+        orderBy: [{ category: "asc" }, { name: "asc" }],
+        select: { id: true, name: true, category: true, size: true, price: true, stockQuantity: true, image: true },
+      }),
     ]);
+    const sales = recentSales.map((sale) => ({
+      id: sale.id,
+      salesperson: sale.salesperson,
+      payment_method: sale.paymentMethod,
+      items: sale.items,
+      subtotal: Number(sale.subtotal),
+      created_at: sale.createdAt.toISOString(),
+    }));
     return NextResponse.json({
       today: {
         count: todaySales._count._all,
         revenue: Number(todaySales._sum.subtotal || 0),
       },
-      sales: recentSales.map((sale) => ({
-        id: sale.id,
-        salesperson: sale.salesperson,
-        payment_method: sale.paymentMethod,
-        items: sale.items,
-        subtotal: Number(sale.subtotal),
-        created_at: sale.createdAt.toISOString(),
-      })),
+      sales,
+      recentSales: sales.slice(0, 20),
+      products: products.map((product) => ({ ...product, price: Number(product.price) })),
+      lowStockCount: products.filter((product) => product.stockQuantity <= 5).length,
     });
   } catch (error) {
     console.error("Admin could not load in-store sales:", error);

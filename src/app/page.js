@@ -86,7 +86,7 @@ async function verifyPaymentWithRetry(reference) {
 
 function ProductCard({ product, onAdd, onPreview, isWishlisted, onToggleWishlist }) {
   const outOfStock = Number.isInteger(product.stockQuantity) && product.stockQuantity <= 0;
-  return <article className="product-card"><div className="product-card-visual"><button className="product-image" onClick={() => onPreview(product)} aria-label={`View ${product.name}`}><span className="product-photo" style={{ backgroundImage: `url(${product.image})` }} />{product.badge && <span className="product-badge">{product.badge}</span>}<span className="quick-add">Quick view <Icon name="arrow" size={15} /></span></button><button className={`wishlist-toggle${isWishlisted ? " active" : ""}`} onClick={() => onToggleWishlist(product)} aria-label={isWishlisted ? `Remove ${product.name} from wishlist` : `Add ${product.name} to wishlist`} aria-pressed={isWishlisted}><Icon name={isWishlisted ? "favorite" : "heart"} size={19} /></button></div><div className="product-info"><div><p className="eyebrow product-card-meta"><span>{product.category}</span>{Number.isInteger(product.stockQuantity) && <span className="product-stock-count" aria-label={`${product.stockQuantity} ${product.stockQuantity === 1 ? "unit" : "units"} available`}><span aria-hidden="true">·</span> {product.stockQuantity} {product.stockQuantity === 1 ? "unit" : "units"}</span>}</p><h3>{product.name}</h3></div><p className="product-price">{money.format(product.price)}</p></div><button className="add-to-cart-button" onClick={() => onAdd(product)} disabled={outOfStock}>{outOfStock ? "Out of stock" : <>Add to cart <Icon name="plus" size={16} /></>}</button></article>;
+  return <article className="product-card"><div className="product-card-visual"><button className="product-image" onClick={() => onPreview(product)} aria-label={`View ${product.name}`}><span className="product-photo" style={{ backgroundImage: `url(${product.image})` }} />{product.badge && <span className="product-badge">{product.badge}</span>}<span className="quick-add">Quick view <Icon name="arrow" size={15} /></span></button><button className={`wishlist-toggle${isWishlisted ? " active" : ""}`} onClick={() => onToggleWishlist(product)} aria-label={isWishlisted ? `Remove ${product.name} from wishlist` : `Add ${product.name} to wishlist`} aria-pressed={isWishlisted}><Icon name={isWishlisted ? "favorite" : "heart"} size={19} /></button></div><div className="product-info"><div><p className="eyebrow product-card-meta"><span>{product.category}</span></p><h3>{product.name}</h3></div><p className="product-price">{money.format(product.price)}</p></div><button className="add-to-cart-button" onClick={() => onAdd(product)} disabled={outOfStock}>{outOfStock ? "Out of stock" : <>Add to cart <Icon name="plus" size={16} /></>}</button></article>;
 }
 
 function AccountEmptyState({ title, message, action, onAction }) {
@@ -392,7 +392,7 @@ export default function Home() {
         ? `${product.name} is out of stock.`
         : availableQuantity === 20 && (!stockLimited || product.stockQuantity > 20)
           ? "You can add up to 20 of each product."
-          : `Only ${availableQuantity} ${availableQuantity === 1 ? "item is" : "items are"} available.`);
+          : "This product has reached the available quantity.");
       return;
     }
     setCart((current) => {
@@ -416,7 +416,7 @@ export default function Home() {
     if (delta > 0 && item && item.quantity >= availableQuantity) {
       setToast(availableQuantity === 20 && (!Number.isInteger(item.stockQuantity) || item.stockQuantity > 20)
         ? "You can add up to 20 of each product."
-        : `Only ${availableQuantity} ${availableQuantity === 1 ? "item is" : "items are"} available.`);
+        : "This product has reached the available quantity.");
       return;
     }
     setCart((current) => current.reduce((next, cartItem) => {

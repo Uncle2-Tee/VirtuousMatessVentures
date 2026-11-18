@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import LockResetIcon from "@mui/icons-material/LockReset";
 import CloseIcon from "@mui/icons-material/Close";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlineOutlined";
@@ -15,6 +16,7 @@ import BrandWordmark from "../components/brand-wordmark";
 const money = new Intl.NumberFormat("en-GH", { style: "currency", currency: "GHS", minimumFractionDigits: 2 });
 const emptyForm = { name: "", category: "Dresses", price: "", size: "", stockQuantity: "", image: "", description: "", howToUse: defaultProductUsage, caution: defaultProductCaution };
 const LOW_STOCK_THRESHOLD = 5;
+const DASHBOARD_REFRESH_INTERVAL_MS = 10_000;
 
 function timeBasedGreeting() {
   const hour = new Date().getHours();
@@ -80,15 +82,6 @@ export default function AdminDashboard({ username }) {
   const [uploadingImage, setUploadingImage] = useState(false);
   const [databaseReady, setDatabaseReady] = useState(false);
   const [stockRefreshError, setStockRefreshError] = useState("");
-  const [orders, setOrders] = useState([]);
-  const [paymentReceipts, setPaymentReceipts] = useState(null);
-  const [paymentReceiptsError, setPaymentReceiptsError] = useState("");
-  const [ordersError, setOrdersError] = useState("");
-  const [ordersLoading, setOrdersLoading] = useState(true);
-  const [newOrders, setNewOrders] = useState([]);
-  const [recordedSales, setRecordedSales] = useState([]);
-  const [salesToday, setSalesToday] = useState(null);
-  const [salesReportError, setSalesReportError] = useState("");
   const [passwordPanelOpen, setPasswordPanelOpen] = useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -98,8 +91,6 @@ export default function AdminDashboard({ username }) {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [passwordSaving, setPasswordSaving] = useState(false);
   const [passwordFeedback, setPasswordFeedback] = useState(null);
-  const knownOrderIds = useRef(new Set());
-  const initialOrdersLoaded = useRef(false);
   const knownLowStockProductIds = useRef(null);
   const router = useRouter();
 
@@ -148,121 +139,20 @@ export default function AdminDashboard({ username }) {
       }
     }
     void loadCatalogue();
-    const interval = window.setInterval(loadCatalogue, 30_000);
-    const onFocus = () => { void loadCatalogue(); };
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") void loadCatalogue();
+    };
+    const interval = window.setInterval(refreshWhenVisible, DASHBOARD_REFRESH_INTERVAL_MS);
+    const onFocus = refreshWhenVisible;
     window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
     return () => {
       cancelled = true;
       window.clearInterval(interval);
       window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
     };
   }, [catalogueRetryKey]);
-
-  useEffect(() => {
-    let cancelled = false;
-    let requestInFlight = false;
-    async function loadOrders() {
-      if (requestInFlight) return;
-      requestInFlight = true;
-      setOrdersLoading((loading) => loading || !initialOrdersLoaded.current);
-      try {
-        const { orders: savedOrders } = await readApiResponse(await fetch("/api/admin/orders", { cache: "no-store" }));
-        if (cancelled) return;
-        const existingIds = knownOrderIds.current;
-        if (initialOrdersLoaded.current) {
-          const arrived = savedOrders.filter((order) => !existingIds.has(order.id));
-          if (arrived.length) {
-            setNewOrders((current) => [...arrived.filter((order) => !current.some((item) => item.id === order.id)), ...current]);
-            if (typeof Notification !== "undefined" && Notification.permission === "granted") {
-              new Notification(arrived.length === 1 ? "New customer order" : `${arrived.length} new customer orders`, {
-                body: arrived.slice(0, 3).map((order) => `${order.customer_name} · ${money.format(Number(order.total))}`).join("\n"),
-                tag: "virtuous-matess-ventures-new-orders",
-              });
-            }
-          }
-        }
-        knownOrderIds.current = new Set(savedOrders.map((order) => order.id));
-        initialOrdersLoaded.current = true;
-        setOrders(savedOrders);
-        setOrdersError("");
-      } catch (error) {
-        if (!cancelled) setOrdersError(error.message || "Could not load orders.");
-      } finally {
-        requestInFlight = false;
-        if (!cancelled) setOrdersLoading(false);
-      }
-    }
-    void loadOrders();
-    const interval = window.setInterval(loadOrders, 30_000);
-    const onFocus = () => { void loadOrders(); };
-    window.addEventListener("focus", onFocus);
-    return () => {
-      cancelled = true;
-      window.clearInterval(interval);
-      window.removeEventListener("focus", onFocus);
-    };
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    let requestInFlight = false;
-    async function loadRecordedSales() {
-      if (requestInFlight) return;
-      requestInFlight = true;
-      try {
-        const { sales: savedSales, today } = await readApiResponse(await fetch("/api/admin/sales", { cache: "no-store" }));
-        if (cancelled) return;
-        if (!Array.isArray(savedSales) || !today || !Number.isFinite(today.revenue) || !Number.isSafeInteger(today.count)) {
-          throw new Error("The in-store sales report response is invalid.");
-        }
-        setRecordedSales(savedSales);
-        setSalesToday(today);
-        setSalesReportError("");
-      } catch (error) {
-        if (!cancelled) setSalesReportError(error.message || "Could not load in-store sales.");
-      } finally {
-        requestInFlight = false;
-      }
-    }
-    void loadRecordedSales();
-    const interval = window.setInterval(loadRecordedSales, 30_000);
-    const onFocus = () => { void loadRecordedSales(); };
-    window.addEventListener("focus", onFocus);
-    return () => {
-      cancelled = true;
-      window.clearInterval(interval);
-      window.removeEventListener("focus", onFocus);
-    };
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    let requestInFlight = false;
-    async function loadPaymentReceipts() {
-      if (requestInFlight) return;
-      requestInFlight = true;
-      try {
-        const { receipts } = await readApiResponse(await fetch("/api/admin/payments", { cache: "no-store" }));
-        if (cancelled) return;
-        if (!Array.isArray(receipts)) throw new Error("The payment receipts response is invalid.");
-        setPaymentReceipts(receipts);
-        setPaymentReceiptsError("");
-      } catch (error) {
-        if (!cancelled) setPaymentReceiptsError(error.message || "Could not load payment receipts.");
-      } finally {
-        requestInFlight = false;
-      }
-    }
-    void loadPaymentReceipts();
-    const interval = window.setInterval(loadPaymentReceipts, 30_000);
-    const onFocus = () => { void loadPaymentReceipts(); };
-    window.addEventListener("focus", onFocus);
-    return () => {
-      cancelled = true;
-      window.clearInterval(interval);
-      window.removeEventListener("focus", onFocus);
-    };
-  }, []);
 
   useEffect(() => {
     if (!message || !databaseReady) return;
@@ -494,12 +384,8 @@ export default function AdminDashboard({ username }) {
     }
   }
 
-  const lowStockProducts = products
-    .filter((product) => product.stockQuantity <= LOW_STOCK_THRESHOLD)
-    .sort((first, second) => first.stockQuantity - second.stockQuantity);
-
   return <main className="dashboard-shell">
-    <header className="dashboard-header"><div className="dashboard-brand-logo"><BrandWordmark /></div><div className="dashboard-header-actions"><span className="secure-status">● Signed in as {username}</span><button type="button" className="dashboard-password-toggle" onClick={togglePasswordPanel} aria-expanded={passwordPanelOpen} aria-controls="admin-password-panel"><LockResetIcon fontSize="small" aria-hidden="true" />Change password</button><button onClick={signOut}>Sign out</button></div></header>
+    <header className="dashboard-header"><div className="dashboard-brand-logo"><BrandWordmark /></div><div className="dashboard-header-actions"><span className="secure-status">● Signed in as {username}</span><Link className="dashboard-sales-button" href="/sales?from=admin">Sales dashboard</Link><button type="button" className="dashboard-password-toggle" onClick={togglePasswordPanel} aria-expanded={passwordPanelOpen} aria-controls="admin-password-panel"><LockResetIcon fontSize="small" aria-hidden="true" />Change password</button><button onClick={signOut}>Sign out</button></div></header>
     {passwordPanelOpen && <section className="admin-password-panel" id="admin-password-panel" aria-labelledby="admin-password-heading">
       <div className="admin-password-panel-heading">
         <div><p className="atelier-kicker">Security</p><h2 id="admin-password-heading">Change password</h2></div>
@@ -526,83 +412,9 @@ export default function AdminDashboard({ username }) {
     </section>}
     <section className="dashboard-heading"><p className="atelier-kicker">Store administration</p><h1>{greeting}</h1><p>Keep your collection polished, current, and ready to shop.</p></section>
     {message && !databaseReady && <p className="database-warning" role="alert">{message} Check DATABASE_URL in your environment and run `npx prisma db push` if the schema has not been applied.</p>}
-    <section className="dashboard-overview-grid" aria-label="Inventory alerts, customer activity, payment receipts, new listing, and live catalogue">
+    <section className="dashboard-overview-grid" aria-label="New listing and live catalogue">
       <div className="dashboard-overview-left">
       {stockRefreshError && <p className="database-warning" role="alert">Inventory could not be refreshed. The displayed stock may be out of date. {stockRefreshError}</p>}
-      {lowStockProducts.length > 0 && <section className="low-stock-panel" aria-labelledby="low-stock-heading" role="status">
-        <div className="low-stock-panel-heading"><div><p className="atelier-kicker">Inventory alert</p><h2 id="low-stock-heading">{lowStockProducts.length} {lowStockProducts.length === 1 ? "product needs" : "products need"} restocking</h2></div><span>At or below {LOW_STOCK_THRESHOLD} units</span></div>
-        <ul className="low-stock-list">{lowStockProducts.map((product) => <li key={product.id}><strong>{product.name}</strong><span className={product.stockQuantity === 0 ? "out-of-stock" : ""}>{product.stockQuantity === 0 ? "Out of stock" : `${product.stockQuantity} ${product.stockQuantity === 1 ? "unit" : "units"} left`}</span></li>)}</ul>
-        <p>Inventory refreshes every 30 seconds while this dashboard is open.</p>
-      </section>}
-      <section className="sales-report-panel" aria-labelledby="sales-report-heading">
-        <div className="sales-report-heading"><div><p className="atelier-kicker">Point-of-sale activity</p><h2 id="sales-report-heading">In-store sales</h2></div><div className="sales-report-today"><span>Today</span><strong>{salesToday ? money.format(salesToday.revenue) : "—"}</strong><small>{salesToday ? `${salesToday.count} ${salesToday.count === 1 ? "sale" : "sales"}` : "Sales total"}</small></div></div>
-        {salesReportError ? <p className="sales-report-error" role="alert">{salesReportError}</p>
-          : recordedSales.length ? <div className="sales-report-list">{recordedSales.slice(0, 8).map((sale) => <article key={sale.id}>
-            <div><strong>#{sale.id.slice(0, 8).toUpperCase()}</strong><span>{sale.salesperson} · {new Intl.DateTimeFormat("en-GH", { dateStyle: "medium", timeStyle: "short" }).format(new Date(sale.created_at))}</span><small>{Array.isArray(sale.items) ? sale.items.map((item) => `${item.name} × ${item.quantity}`).join(", ") : "Sale items unavailable"} · {sale.payment_method.replaceAll("_", " ")}</small></div><b>{money.format(sale.subtotal)}</b>
-          </article>)}</div>
-            : <p className="sales-report-empty">No in-store sales have been recorded yet.</p>}
-        <p className="sales-report-note">Sales are recorded by staff and inventory is deducted automatically. Refreshes every 30 seconds.</p>
-      </section>
-      <details className="orders-panel admin-dropdown-card">
-      <summary className="orders-panel-heading admin-dropdown-summary" tabIndex={-1}>
-        <span className="orders-panel-heading-copy"><span className="atelier-kicker">Customer activity</span><strong id="orders-heading">Orders <span className="orders-count">{orders.length}</span></strong></span>
-        <button className="admin-dropdown-toggle" type="button" aria-label="Expand orders" aria-expanded="false" aria-controls="orders-panel-content" data-dropdown-label="orders" onClick={toggleAdminDropdown}><span className="admin-dropdown-chevron" aria-hidden="true" /></button>
-      </summary>
-      <div className="admin-dropdown-content" id="orders-panel-content">
-        <p className="orders-panel-description">New orders are checked every 30 seconds while the dashboard is open.</p>
-      {newOrders.length > 0 && <div className="new-orders-alert" role="status"><div><strong>{newOrders.length === 1 ? "New order received" : `${newOrders.length} new orders received`}</strong><span>{newOrders[0].customer_name} · {money.format(Number(newOrders[0].total))}</span></div><button type="button" onClick={() => setNewOrders([])}>Mark as seen</button></div>}
-      {ordersError && <p className="database-warning orders-error" role="alert">{ordersError}</p>}
-      {ordersLoading && orders.length === 0 && <p className="orders-empty">Loading orders…</p>}
-      {!ordersLoading && !ordersError && orders.length === 0 && <p className="orders-empty">No orders yet. New customer orders will appear here automatically.</p>}
-      {orders.length > 0 && <div className="admin-orders-list">{orders.map((order) => (
-        <article className="admin-order-card" key={order.id}>
-          <div className="admin-order-top"><div><p className="admin-order-number">Order #{order.id.slice(0, 8).toUpperCase()}</p><time dateTime={order.created_at}>{new Intl.DateTimeFormat("en-GH", { dateStyle: "medium", timeStyle: "short" }).format(new Date(order.created_at))}</time></div></div>
-          <div className="admin-order-customer"><strong>{order.customer_name}</strong>{order.customer_email && <a href={`mailto:${order.customer_email}`}>{order.customer_email}</a>}<a href={`tel:${order.phone}`}>{order.phone}</a></div>
-          <ul className="admin-order-items">{(Array.isArray(order.items) ? order.items : []).map((item, index) => <li key={`${order.id}-${item.product_id || item.name}-${index}`}><span>{item.name} × {item.quantity}</span><strong>{money.format(Number(item.line_total ?? Number(item.price) * Number(item.quantity)))}</strong></li>)}</ul>
-          <div className="admin-order-bottom"><div><span>Delivery address & city / town</span><p>{order.shipping_address}</p><small>Payment: Mobile Money · {money.format(Number(order.total))}</small></div></div>
-        </article>
-      ))}</div>}
-      </div>
-      </details>
-      <section className="catalog-panel admin-receipts-panel" aria-labelledby="admin-payment-receipts-heading">
-        <details className="admin-receipts-dropdown admin-dropdown-card">
-          <summary className="panel-heading admin-receipts-summary admin-dropdown-summary" tabIndex={-1}>
-            <span className="admin-receipts-heading-copy"><span className="atelier-kicker">Verified payments</span><span className="admin-receipts-title" id="admin-payment-receipts-heading" role="heading" aria-level="2">Payment receipts</span></span>
-            <span className="admin-receipts-summary-side"><span className="product-count">{paymentReceipts ? `${paymentReceipts.length} receipts` : "Recent payments"}</span><button className="admin-dropdown-toggle" type="button" aria-label="Expand payment receipts" aria-expanded="false" aria-controls="admin-payment-receipts-content" data-dropdown-label="payment receipts" onClick={toggleAdminDropdown}><span className="admin-dropdown-chevron" aria-hidden="true" /></button></span>
-          </summary>
-          <div className="admin-receipts-content" id="admin-payment-receipts-content">
-        <p className="admin-receipts-intro">Confirmed transactions linked to customer orders.</p>
-        {paymentReceipts === null && !paymentReceiptsError && <p className="orders-empty">Loading payment receipts…</p>}
-        {paymentReceiptsError && <p className="database-warning orders-error" role="alert">{paymentReceiptsError}</p>}
-        {paymentReceipts?.length === 0 && !paymentReceiptsError && <div className="admin-receipts-empty"><strong>No payment receipts yet</strong><span>Verified payments will appear here when they are linked to an order.</span></div>}
-        {paymentReceipts?.length > 0 && <div className="admin-payment-receipt-list">{paymentReceipts.map((receipt) => (
-          <article className="admin-payment-receipt" key={receipt.reference}>
-            <div className="admin-payment-receipt-heading">
-              <div><p>{receipt.customer_name}</p><span>Order #{receipt.order_id.slice(0, 8).toUpperCase()}</span></div>
-              <div className="admin-payment-receipt-total"><strong>{new Intl.NumberFormat("en-GH", { style: "currency", currency: receipt.currency }).format(receipt.amount)}</strong><span>Paid</span></div>
-            </div>
-            {receipt.customer_email && <p className="admin-payment-receipt-email">{receipt.customer_email}</p>}
-            <div className="admin-payment-receipt-meta">
-              <time dateTime={receipt.paid_at}>{new Intl.DateTimeFormat("en-GH", { dateStyle: "medium", timeStyle: "short" }).format(new Date(receipt.paid_at))}</time>
-              <span>Paystack</span>
-            </div>
-            <details className="admin-payment-receipt-details">
-              <summary>Receipt details</summary>
-              <div>
-                {Array.isArray(receipt.items) && receipt.items.length > 0 && <ul className="admin-payment-receipt-items">{receipt.items.map((item, index) => (
-                  <li key={`${receipt.reference}-${item.product_id || item.name || index}`}>
-                    <span>{item.name} × {item.quantity}</span>
-                    <strong>{new Intl.NumberFormat("en-GH", { style: "currency", currency: receipt.currency }).format(Number(item.line_total ?? Number(item.price) * Number(item.quantity)))}</strong>
-                  </li>
-                ))}</ul>}
-                <p><span>Transaction reference</span><code>{receipt.reference}</code></p>
-              </div>
-            </details>
-          </article>
-        ))}</div>}
-          </div>
-        </details>
-      </section>
     <section className="dashboard-grid">
       <form className="catalog-form" onSubmit={addProduct}>
         <details className="listing-dropdown admin-dropdown-card">

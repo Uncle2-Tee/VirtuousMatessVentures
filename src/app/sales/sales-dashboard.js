@@ -8,6 +8,7 @@ import BrandWordmark from "../components/brand-wordmark";
 const money = new Intl.NumberFormat("en-GH", { style: "currency", currency: "GHS", minimumFractionDigits: 2 });
 const quantityFormatter = new Intl.NumberFormat("en-GH");
 const paymentLabels = { cash: "Cash", mobile_money: "Mobile Money", card: "Card" };
+const DASHBOARD_REFRESH_INTERVAL_MS = 10_000;
 
 async function readApiResponse(response) {
   const body = await response.json().catch(() => ({}));
@@ -19,7 +20,45 @@ function formatSaleTime(value) {
   return new Intl.DateTimeFormat("en-GH", { hour: "numeric", minute: "2-digit" }).format(new Date(value));
 }
 
-export default function SalesDashboard({ username }) {
+function SaleReceipt({ sale, onClose, onPrint }) {
+  const receiptNumber = sale.id.slice(0, 8).toUpperCase();
+  const issuedAt = new Intl.DateTimeFormat("en-GH", { dateStyle: "medium", timeStyle: "short" }).format(new Date(sale.created_at));
+
+  return <section className="sales-receipt-panel" aria-labelledby="sales-receipt-heading">
+    <div className="sales-receipt-content">
+      <header className="sales-receipt-header">
+        <div><p className="sales-eyebrow">Virtuous Matess Ventures</p><h2 id="sales-receipt-heading">Sales receipt</h2></div>
+        <div className="sales-receipt-number"><span>Receipt</span><strong>#{receiptNumber}</strong></div>
+      </header>
+      <div className="sales-receipt-meta">
+        <div><span>Date &amp; time</span><time dateTime={sale.created_at}>{issuedAt}</time></div>
+        <div><span>Issued by</span><strong>{sale.salesperson}</strong></div>
+        <div><span>Payment method</span><strong>{paymentLabels[sale.payment_method] || sale.payment_method}</strong></div>
+      </div>
+      <div className="sales-receipt-table-wrap">
+        <table className="sales-receipt-table">
+          <thead><tr><th>Item</th><th className="sales-receipt-quantity">Qty</th><th className="sales-receipt-amount">Unit price</th><th className="sales-receipt-amount">Amount</th></tr></thead>
+          <tbody>{sale.items.map((item, index) => (
+            <tr key={`${item.product_id || item.name}-${index}`}>
+              <td>{item.name}{item.size ? <small>{item.size}</small> : null}</td>
+              <td className="sales-receipt-quantity">{quantityFormatter.format(item.quantity)}</td>
+              <td className="sales-receipt-amount">{money.format(Number(item.price))}</td>
+              <td className="sales-receipt-amount">{money.format(Number(item.line_total))}</td>
+            </tr>
+          ))}</tbody>
+        </table>
+      </div>
+      <div className="sales-receipt-total"><span>Total paid</span><strong>{money.format(sale.subtotal)}</strong></div>
+      <p className="sales-receipt-thanks">Thank you for shopping with us.</p>
+    </div>
+    <div className="sales-receipt-actions">
+      <button type="button" className="sales-receipt-print" onClick={onPrint}>Print receipt</button>
+      <button type="button" className="sales-receipt-close" onClick={onClose}>Close</button>
+    </div>
+  </section>;
+}
+
+export default function SalesDashboard({ username, showAdminReturn = false, readOnly = false }) {
   const router = useRouter();
   const [dashboard, setDashboard] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -31,10 +70,11 @@ export default function SalesDashboard({ username }) {
   const [savingSale, setSavingSale] = useState(false);
   const [saleError, setSaleError] = useState("");
   const [saleNotice, setSaleNotice] = useState("");
+  const [completedSale, setCompletedSale] = useState(null);
 
   const refreshDashboard = useCallback(async () => {
     try {
-      const data = await readApiResponse(await fetch("/api/sales", { cache: "no-store" }));
+      const data = await readApiResponse(await fetch(readOnly ? "/api/admin/sales" : "/api/sales", { cache: "no-store" }));
       setDashboard(data);
       setCart((current) => current.flatMap((item) => {
         const latestProduct = data.products.find((product) => product.id === item.id);
@@ -47,20 +87,22 @@ export default function SalesDashboard({ username }) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [readOnly]);
 
   useEffect(() => {
     let active = true;
     const refresh = async () => {
-      if (active) await refreshDashboard();
+      if (active && document.visibilityState === "visible") await refreshDashboard();
     };
     void refresh();
-    const interval = window.setInterval(refresh, 30_000);
+    const interval = window.setInterval(refresh, DASHBOARD_REFRESH_INTERVAL_MS);
     window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
     return () => {
       active = false;
       window.clearInterval(interval);
       window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
     };
   }, [refreshDashboard]);
 
@@ -115,7 +157,8 @@ export default function SalesDashboard({ username }) {
         }),
       }));
       setCart([]);
-      setSaleNotice(`Sale ${sale.id.slice(0, 8).toUpperCase()} recorded · ${money.format(sale.subtotal)}.`);
+      setSaleNotice(`Sale ${sale.id.slice(0, 8).toUpperCase()} recorded. Receipt is ready to print.`);
+      setCompletedSale(sale);
       await refreshDashboard();
     } catch (error) {
       setSaleError(error.message || "Could not record this sale.");
@@ -137,13 +180,8 @@ export default function SalesDashboard({ username }) {
   return <main className="sales-shell">
     <header className="sales-header">
       <Link href="/" aria-label="Virtuous Matess Ventures home"><BrandWordmark /></Link>
-      <div className="sales-header-right"><span className="sales-online-indicator"><i />Sales desk</span><span className="sales-user">{username}</span><button type="button" className="sales-sign-out" onClick={signOut}>Sign out</button></div>
+      <div className="sales-header-right">{showAdminReturn && <Link className="sales-admin-return" href="/admin"><span aria-hidden="true">←</span> Admin dashboard</Link>}<span className="sales-online-indicator"><i />{readOnly ? "Admin monitor" : "Sales desk"}</span><span className="sales-user">{readOnly ? "Read-only" : username}</span>{!readOnly && <button type="button" className="sales-sign-out" onClick={signOut}>Sign out</button>}</div>
     </header>
-
-    <section className="sales-welcome">
-      <div><p className="sales-eyebrow">Store operations · {new Intl.DateTimeFormat("en-GH", { weekday: "long", day: "numeric", month: "long" }).format(new Date())}</p><h1>Good business<br /><em>starts here.</em></h1><p>Serve customers, record every sale, and keep an eye on what’s moving.</p></div>
-      <div className="sales-welcome-note"><span className="sales-note-mark">V</span><span><strong>Every sale counts.</strong><small>Recorded sales update stock immediately and appear in the admin report.</small></span></div>
-    </section>
 
     <section className="sales-metrics" aria-label="Today's sales summary">
       <article><span>Today’s revenue</span><strong>{dashboard ? money.format(dashboard.today.revenue) : "—"}</strong><small>In-store sales recorded today</small></article>
@@ -154,8 +192,9 @@ export default function SalesDashboard({ username }) {
 
     {loadError && <p className="sales-banner sales-banner-error" role="alert">{loadError}<button type="button" onClick={() => { setLoading(true); void refreshDashboard(); }}>Retry</button></p>}
     {saleNotice && <p className="sales-banner sales-banner-success" role="status">{saleNotice}</p>}
+    {completedSale && <SaleReceipt sale={completedSale} onPrint={() => window.print()} onClose={() => setCompletedSale(null)} />}
 
-    <section className="sales-workspace" aria-label="Point of sale">
+    <section className={`sales-workspace${readOnly ? " sales-workspace-readonly" : ""}`} aria-label="Point of sale">
       <div className="sales-products-panel">
         <div className="sales-section-heading"><div><p className="sales-eyebrow">Point of sale</p><h2>Choose products</h2></div><span className="sales-product-count">{dashboard ? `${dashboard.products.length} products` : "Loading…"}</span></div>
         <div className="sales-filters">
@@ -169,12 +208,12 @@ export default function SalesDashboard({ username }) {
                 const inCart = cart.find((item) => item.id === product.id)?.quantity || 0;
                 return <article className={`sales-product-card${product.stockQuantity === 0 ? " is-sold-out" : ""}`} key={product.id}>
                   <div className="sales-product-image" style={{ backgroundImage: product.image ? `url("${product.image}")` : undefined }}><span className={product.stockQuantity <= 5 ? "sales-stock-pill sales-stock-pill-low" : "sales-stock-pill"}>{product.stockQuantity === 0 ? "Sold out" : `${product.stockQuantity} in stock`}</span></div>
-                  <div className="sales-product-info"><span>{product.category} · {product.size}</span><h3>{product.name}</h3><div><strong>{money.format(product.price)}</strong><button type="button" onClick={() => addToCart(product)} disabled={product.stockQuantity === 0 || inCart >= product.stockQuantity} aria-label={`Add ${product.name} to sale`}>{inCart ? `Added · ${inCart}` : "Add to sale"}<span aria-hidden="true">+</span></button></div></div>
+                  <div className="sales-product-info"><span>{product.category} · {product.size}</span><h3>{product.name}</h3><div><strong>{money.format(product.price)}</strong>{!readOnly && <button type="button" onClick={() => addToCart(product)} disabled={product.stockQuantity === 0 || inCart >= product.stockQuantity} aria-label={`Add ${product.name} to sale`}>{inCart ? `Added · ${inCart}` : "Add to sale"}<span aria-hidden="true">+</span></button>}</div></div>
                 </article>;
               })}</div>}
       </div>
 
-      <aside className="sales-checkout-panel" aria-labelledby="sales-checkout-heading">
+      {!readOnly && <aside className="sales-checkout-panel" aria-labelledby="sales-checkout-heading">
         <div className="sales-section-heading"><div><p className="sales-eyebrow">Current transaction</p><h2 id="sales-checkout-heading">Sale summary</h2></div><span className="sales-cart-count">{cartUnits} {cartUnits === 1 ? "item" : "items"}</span></div>
         {cart.length === 0 ? <div className="sales-cart-empty"><span aria-hidden="true">＋</span><strong>Your sale is empty</strong><small>Add products from the collection to begin.</small></div>
           : <ul className="sales-cart-list">{cart.map((item) => <li key={item.id}><div className="sales-cart-item-name"><strong>{item.name}</strong><small>{money.format(item.price)} each</small></div><div className="sales-quantity-control"><button type="button" onClick={() => changeQuantity(item.id, -1)} aria-label={`Remove one ${item.name}`}>−</button><span>{item.quantity}</span><button type="button" onClick={() => changeQuantity(item.id, 1)} disabled={item.quantity >= (dashboard?.products.find((product) => product.id === item.id)?.stockQuantity ?? item.stockQuantity)} aria-label={`Add one ${item.name}`}>+</button></div><strong className="sales-line-total">{money.format(item.price * item.quantity)}</strong></li>)}</ul>}
@@ -186,12 +225,12 @@ export default function SalesDashboard({ username }) {
           <button type="button" className="sales-complete-button" disabled={!cart.length || savingSale || Boolean(loadError)} onClick={completeSale}>{savingSale ? "Recording sale…" : "Complete sale"}<span aria-hidden="true">→</span></button>
           <small className="sales-stock-note">Stock updates as soon as the sale is recorded.</small>
         </div>
-      </aside>
+      </aside>}
     </section>
 
     <section className="sales-history-panel" aria-labelledby="sales-history-heading">
-      <div className="sales-section-heading"><div><p className="sales-eyebrow">A clear record</p><h2 id="sales-history-heading">Recent sales</h2></div><span className="sales-history-refresh">Refreshes every 30 seconds</span></div>
-      {dashboard?.recentSales.length ? <div className="sales-history-table-wrap"><table className="sales-history-table"><thead><tr><th>Receipt</th><th>Items</th><th>Payment</th><th>Recorded by</th><th>Time</th><th className="sales-table-amount">Total</th></tr></thead><tbody>{dashboard.recentSales.map((sale) => <tr key={sale.id}><td><span className="sales-receipt-id">#{sale.id.slice(0, 8).toUpperCase()}</span></td><td>{sale.items.map((item) => `${item.name} × ${item.quantity}`).join(", ")}</td><td>{paymentLabels[sale.payment_method] || sale.payment_method}</td><td>{sale.salesperson}</td><td>{formatSaleTime(sale.created_at)}</td><td className="sales-table-amount">{money.format(sale.subtotal)}</td></tr>)}</tbody></table></div>
+      <div className="sales-section-heading"><div><p className="sales-eyebrow">A clear record</p><h2 id="sales-history-heading">Recent sales</h2></div><span className="sales-history-refresh">Live updates every 10 seconds</span></div>
+      {dashboard?.recentSales.length ? <div className="sales-history-table-wrap"><table className="sales-history-table"><thead><tr><th>Receipt</th><th>Items</th><th>Payment</th><th>Recorded by</th><th>Time</th><th className="sales-table-amount">Total</th>{!readOnly && <th>Action</th>}</tr></thead><tbody>{dashboard.recentSales.map((sale) => <tr key={sale.id}><td><span className="sales-receipt-id">#{sale.id.slice(0, 8).toUpperCase()}</span></td><td>{sale.items.map((item) => `${item.name} × ${item.quantity}`).join(", ")}</td><td>{paymentLabels[sale.payment_method] || sale.payment_method}</td><td>{sale.salesperson}</td><td>{formatSaleTime(sale.created_at)}</td><td className="sales-table-amount">{money.format(sale.subtotal)}</td>{!readOnly && <td><button className="sales-history-receipt-button" type="button" onClick={() => { setCompletedSale(sale); window.scrollTo({ top: 0, behavior: "smooth" }); }}>Issue receipt</button></td>}</tr>)}</tbody></table></div>
         : <div className="sales-history-empty">{loading ? "Loading recent sales…" : "No in-store sales have been recorded yet."}</div>}
     </section>
     <footer className="sales-footer"><span>Virtuous Matess Ventures</span><span>Accurate records. Thoughtful service.</span></footer>

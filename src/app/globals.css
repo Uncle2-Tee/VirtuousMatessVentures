@@ -1996,13 +1996,3 @@ button:focus-visible,
   align-items:center;
   gap:4px 8px;
 }
-.product-card-meta .product-stock-count {
-  display:inline-flex;
-  align-items:center;
-  gap:5px;
-  color:var(--muted);
-  font-size:9px;
-  font-weight:500;
-  letter-spacing:0;
-  text-transform:none;
-}

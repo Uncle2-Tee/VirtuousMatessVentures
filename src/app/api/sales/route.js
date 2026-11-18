@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { InsufficientStockError, reserveProductStock } from "../../../lib/inventory";
+import { isTransientDatabaseError } from "../../../lib/database-retry";
 import { prisma } from "../../../lib/prisma";
 import { SALES_SESSION_COOKIE, getSalesSessionUsername } from "../../../lib/sales-auth";
 
@@ -151,6 +152,12 @@ export async function POST(request) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
     console.error("Salesperson could not record a sale:", error);
-    return NextResponse.json({ error: "Could not record the sale. No stock was deducted." }, { status: 503 });
+    if (isTransientDatabaseError(error)) {
+      return NextResponse.json({ error: "The sales database is temporarily unavailable. Check Recent sales before retrying." }, { status: 503 });
+    }
+    if (error?.code === "P2021" || error?.code === "P2022") {
+      return NextResponse.json({ error: "Sales cannot be recorded because the database schema is out of date. Contact the administrator." }, { status: 503 });
+    }
+    return NextResponse.json({ error: "Could not confirm the sale. Check Recent sales before retrying." }, { status: 503 });
   }
 }
