@@ -30,12 +30,6 @@
   letter-spacing:.14em;
   text-transform:uppercase;
 }
-.sales-login-card h1 {
-  margin:16px 0 0;
-  font:400 clamp(32px,6vw,44px)/1 Georgia,serif;
-  letter-spacing:-.055em;
-  text-align:center;
-}
 .sales-login-card .sales-eyebrow { text-align:center; }
 .sales-login-intro {
   margin:16px 0 28px;
