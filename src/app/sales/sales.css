@@ -32,9 +32,11 @@
 }
 .sales-login-card h1 {
   margin:16px 0 0;
-  font:400 clamp(42px,8vw,58px)/.98 Georgia,serif;
-  letter-spacing:-.07em;
+  font:400 clamp(32px,6vw,44px)/1 Georgia,serif;
+  letter-spacing:-.055em;
+  text-align:center;
 }
+.sales-login-card .sales-eyebrow { text-align:center; }
 .sales-login-intro {
   margin:16px 0 28px;
   color:var(--atelier-muted);
