@@ -65,6 +65,7 @@ export async function GET() {
       products: products.map((product) => ({ ...product, price: Number(product.price) })),
       onlineOrders: onlineOrders.map(orderToSalesApi),
       lowStockCount: products.filter((product) => product.stockQuantity <= 5).length,
+      totalStockQuantity: products.reduce((total, product) => total + product.stockQuantity, 0),
     });
   } catch (error) {
     console.error("Admin could not load in-store sales:", error);

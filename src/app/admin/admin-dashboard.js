@@ -98,6 +98,7 @@ export default function AdminDashboard({ username }) {
   const [showSalesPassword, setShowSalesPassword] = useState(false);
   const [showSalesPasswordConfirm, setShowSalesPasswordConfirm] = useState(false);
   const [salesAccessLoading, setSalesAccessLoading] = useState(false);
+  const mobileMenuRef = useRef(null);
   const knownLowStockProductIds = useRef(null);
   const router = useRouter();
 
@@ -367,6 +368,10 @@ export default function AdminDashboard({ username }) {
     router.refresh();
   }
 
+  function closeMobileMenu() {
+    if (mobileMenuRef.current) mobileMenuRef.current.open = false;
+  }
+
   function toggleSecurityPanel() {
     const nextOpen = !securityPanelOpen;
     setSecurityPanelOpen(nextOpen);
@@ -461,7 +466,14 @@ export default function AdminDashboard({ username }) {
   }
 
   return <main className="dashboard-shell">
-    <header className="dashboard-header"><div className="dashboard-brand-logo"><BrandWordmark /></div><div className="dashboard-header-actions"><span className="secure-status">● Signed in as {username}</span><Link className="dashboard-sales-button" href="/sales?from=admin">Sales dashboard</Link><button type="button" className="dashboard-password-toggle" onClick={toggleSecurityPanel} aria-expanded={securityPanelOpen} aria-controls="admin-password-panel"><LockResetIcon fontSize="small" aria-hidden="true" />Manage passwords</button><button onClick={signOut}>Sign out</button></div></header>
+    <header className="dashboard-header"><div className="dashboard-brand-logo"><BrandWordmark /></div><div className="dashboard-header-actions"><details className="dashboard-mobile-menu" ref={mobileMenuRef}>
+      <summary aria-label="Toggle admin dashboard menu" title="Dashboard menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true"><path d="M4 6h16" /><path d="M4 12h16" /><path d="M4 18h16" /></svg></summary>
+      <nav className="dashboard-mobile-menu-items" aria-label="Admin dashboard actions">
+        <Link href="/sales?from=admin"><span>Sales dashboard</span><span aria-hidden="true">→</span></Link>
+        <button type="button" onClick={() => { closeMobileMenu(); toggleSecurityPanel(); }} aria-expanded={securityPanelOpen} aria-controls="admin-password-panel"><LockResetIcon fontSize="small" aria-hidden="true" /><span>Change password</span></button>
+        <button type="button" onClick={() => { closeMobileMenu(); void signOut(); }}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M10 17l5-5-5-5" /><path d="M15 12H3" /><path d="M12 3h6a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-6" /></svg><span>Sign out</span></button>
+      </nav>
+    </details><span className="secure-status">● Signed in as {username}</span><Link className="dashboard-sales-button" href="/sales?from=admin">Sales dashboard</Link><button type="button" className="dashboard-password-toggle" onClick={toggleSecurityPanel} aria-expanded={securityPanelOpen} aria-controls="admin-password-panel"><LockResetIcon fontSize="small" aria-hidden="true" />Manage passwords</button><button onClick={signOut}>Sign out</button></div></header>
     {securityPanelOpen && <section className="admin-password-panel" id="admin-password-panel" aria-labelledby="admin-password-heading">
       <div className="admin-password-panel-heading">
         <div><p className="atelier-kicker">Account security</p><h2 id="admin-password-heading">Manage account credentials</h2></div>

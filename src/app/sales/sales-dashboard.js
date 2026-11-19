@@ -227,14 +227,14 @@ export default function SalesDashboard({ username, showAdminReturn = false, read
   return <main className="sales-shell">
     <header className="sales-header">
       <Link href="/" aria-label="Virtuous Matess Ventures home"><BrandWordmark /></Link>
-      <div className="sales-header-right">{showAdminReturn && <Link className="sales-admin-return" href="/admin"><span aria-hidden="true">←</span> Admin dashboard</Link>}<span className="sales-online-indicator"><i />{readOnly ? "Admin monitor" : "Sales desk"}</span><span className="sales-user">{readOnly ? "Read-only" : username}</span>{!readOnly && <button type="button" className="sales-sign-out" onClick={signOut}>Sign out</button>}</div>
+      <div className="sales-header-right">{showAdminReturn && <Link className="sales-admin-return" href="/admin"><span aria-hidden="true">←</span> Admin dashboard</Link>}<span className="sales-online-indicator"><i />{readOnly ? "Admin monitor" : "Sales desk"}</span><span className="sales-user">{readOnly ? "Read-only" : username}</span>{!readOnly && <button type="button" className="sales-sign-out" onClick={signOut}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M10 17l5-5-5-5" /><path d="M15 12H3" /><path d="M12 3h6a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-6" /></svg><span>Sign out</span></button>}</div>
     </header>
 
     <section className="sales-metrics" aria-label="Today's sales summary">
       <article><span>Today’s revenue</span><strong>{dashboard ? money.format(dashboard.today.revenue) : "—"}</strong><small>In-store sales recorded today</small></article>
       <article><span>Transactions</span><strong>{dashboard ? quantityFormatter.format(dashboard.today.count) : "—"}</strong><small>Sales completed today</small></article>
       <article><span>Products in stock</span><strong>{dashboard ? quantityFormatter.format(dashboard.products.filter((product) => product.stockQuantity > 0).length) : "—"}</strong><small>Available to sell</small></article>
-      <article className={dashboard?.lowStockCount ? "sales-metric-warning" : ""}><span>Low stock</span><strong>{dashboard ? quantityFormatter.format(dashboard.lowStockCount) : "—"}</strong><small>Five units or fewer</small></article>
+      <article className={dashboard?.lowStockCount ? "sales-metric-warning" : ""}><span>Total stock units</span><strong>{dashboard ? quantityFormatter.format(dashboard.totalStockQuantity) : "—"}</strong><small>{dashboard?.lowStockCount ? `${quantityFormatter.format(dashboard.lowStockCount)} products at five units or fewer` : "Across all products · no low-stock alerts"}</small></article>
     </section>
 
     {loadError && <p className="sales-banner sales-banner-error" role="alert">{loadError}<button type="button" onClick={() => { setLoading(true); void refreshDashboard(); }}>Retry</button></p>}

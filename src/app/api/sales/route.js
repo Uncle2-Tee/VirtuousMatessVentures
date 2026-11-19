@@ -80,6 +80,7 @@ export async function GET() {
       recentSales: recentSales.map(salesTransactionToApi),
       onlineOrders: onlineOrders.map(orderToSalesApi),
       lowStockCount: products.filter((product) => product.stockQuantity <= 5).length,
+      totalStockQuantity: products.reduce((total, product) => total + product.stockQuantity, 0),
     });
   } catch (error) {
     console.error("Salesperson could not load the sales dashboard:", error);
