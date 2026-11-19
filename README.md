@@ -32,12 +32,12 @@ You can generate a suitable session secret with:
 node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
 ```
 
-Set `DATABASE_URL` and `DIRECT_URL` to PostgreSQL connection strings. For Supabase-hosted PostgreSQL, use the pooler connection on port `6543` with `pgbouncer=true` for `DATABASE_URL`, and port `5432` for `DIRECT_URL`. The application defaults Prisma's connection pool to five connections to handle concurrent requests; you can set `connection_limit` in `DATABASE_URL` to override this. URL-encode reserved characters in the password (for example, `@` becomes `%40`). Apply the Prisma schema and generate its client with:
+Set `DATABASE_URL` and `DIRECT_URL` to PostgreSQL connection strings. For Supabase-hosted PostgreSQL, use the pooler connection on port `6543` with `pgbouncer=true` for `DATABASE_URL`, and port `5432` for `DIRECT_URL`. The application defaults Prisma's connection pool to five connections to handle concurrent requests; you can set `connection_limit` in `DATABASE_URL` to override this. URL-encode reserved characters in the password (for example, `@` becomes `%40`). Apply the Prisma schema, row-level security settings, and generate its client with:
 
 ```bash
 npx prisma db push
-npx prisma generate
 npx prisma db execute --schema prisma/schema.prisma --file prisma/enable-rls.sql
+npx prisma generate
 npm run db:seed
 ```
 
@@ -45,18 +45,18 @@ The seed command removes the six retired skincare demo products by their origina
 
 After applying the schema, admins can change their password from the dashboard. The new password is scrypt-hashed in the `admin_credentials` table; `ADMIN_PASSWORD` remains the bootstrap password until the first change. Changing it signs out other admin sessions while keeping the current session active. For password recovery, delete the `admin` row from `public.admin_credentials` in a trusted database console; the configured `ADMIN_PASSWORD` can then be used to sign in again.
 
-On Vercel or another serverless host, add these variables in the project’s production environment settings. The admin username and password never reach the browser as configuration values. A successful sign-in creates an HMAC-signed, HTTP-only, SameSite-Strict session cookie containing the signed-in username; it expires after eight hours, and production cookies are HTTPS-only.
+On Vercel or another serverless host, add these variables in the project’s production environment settings. Vercel is configured to run `npm run build`, which synchronizes the Prisma schema and RLS settings before generating Prisma Client when `DATABASE_URL` is configured. Make sure both database URLs point to the intended production database. The admin username and password never reach the browser as configuration values. A successful sign-in creates an HMAC-signed, HTTP-only, SameSite-Strict session cookie containing the signed-in username; it expires after eight hours, and production cookies are HTTPS-only.
 
 ## Sales desk
 
 The private salesperson workspace is available at `/sales`. Until an admin configures the sales login on `/admin`, `SALES_USERNAME` and `SALES_PASSWORD` in `.env.local` (or the hosting provider's environment) provide the bootstrap login. From the admin dashboard's **Manage passwords** section, select the admin or salesperson account to update its credentials. The salesperson password is scrypt-hashed, and changing credentials invalidates existing sales sessions. Sales sessions use the existing `ADMIN_SESSION_SECRET`; no admin credentials are shared with the sales account.
 
-Sales staff can search the live catalogue, record counter sales paid by cash, Mobile Money, or card, and see recent transactions and daily totals. The dashboard shows total units across the catalogue and pulses the total and product badges when any item has five or fewer units. All paid online customer orders, including contact and delivery details, also appear on the sales dashboard and refresh every 10 seconds. Each counter sale records the signed-in salesperson, snapshots item names and prices, and deducts inventory atomically; insufficient stock prevents the sale. Admins can review recent in-store sales and daily totals on `/admin`. The `sales_transactions` and `sales_credentials` tables are included in the Prisma schema and row-level-security setup. Apply the schema and RLS update before using the sales desk:
+Sales staff can search the live catalogue, record counter sales paid by cash, Mobile Money, or card, and see recent transactions and daily totals. The dashboard shows total units across the catalogue and pulses the total and product badges when any item has five or fewer units. All paid online customer orders, including contact and delivery details, also appear on the sales dashboard and refresh every 10 seconds. Each counter sale records the signed-in salesperson, snapshots item names and prices, and deducts inventory atomically; insufficient stock prevents the sale. Admins can review recent in-store sales and daily totals on `/admin`. The `sales_transactions` and `sales_credentials` tables are included in the Prisma schema and row-level-security setup. Vercel builds synchronize the schema and apply RLS settings when production database URLs are configured. For other environments, apply the schema and RLS update before using the sales desk:
 
 ```bash
 npx prisma db push
-npx prisma generate
 npx prisma db execute --schema prisma/schema.prisma --file prisma/enable-rls.sql
+npx prisma generate
 ```
 
 The sales dashboard and sign-in route are excluded from search indexing. Sales access is protected by a separate HTTP-only, SameSite-Strict, eight-hour session cookie. The configured sales password is server-only and is never sent to the browser.

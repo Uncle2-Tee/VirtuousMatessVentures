@@ -39,7 +39,7 @@ export default function SalesLogin({ configured }) {
   return <main className="sales-login-shell">
     <section className="sales-login-card" aria-label="Salesperson sign in">
       <BrandWordmark className="sales-login-logo" />
-      <p className="sales-eyebrow">Virtuous Matess Ventures · Sales desk</p>
+      <p className="sales-eyebrow">Sales desk</p>
       <p className="sales-login-intro">{configured ? "Sign in to serve customers and record today’s sales." : "Sales desk access needs to be configured before a team member can sign in."}</p>
       {configured ? <form className="sales-login-form" onSubmit={submit}>
         <label htmlFor="sales-username">Username</label>
