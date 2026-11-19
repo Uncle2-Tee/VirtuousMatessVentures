@@ -10,10 +10,6 @@ import {
 export const runtime = "nodejs";
 
 export async function POST(request) {
-  if (!isSalesAuthConfigured()) {
-    return NextResponse.json({ error: "Sales access has not been configured." }, { status: 503 });
-  }
-
   let username = "";
   let password = "";
   try {
@@ -22,16 +18,30 @@ export async function POST(request) {
     return NextResponse.json({ error: "Invalid sign-in request." }, { status: 400 });
   }
 
-  if (!salesCredentialsMatch(username, password)) {
-    return NextResponse.json({ error: "That username or password is not recognized." }, { status: 401 });
+  if (typeof username !== "string" || username.length > 32
+    || typeof password !== "string" || password.length > 128) {
+    return NextResponse.json({ error: "Enter a valid sales username and password." }, { status: 400 });
   }
 
-  const session = createSalesSession();
-  if (!session) return NextResponse.json({ error: "Sales access has not been configured." }, { status: 503 });
+  try {
+    if (!(await isSalesAuthConfigured())) {
+      return NextResponse.json({ error: "Sales access has not been configured." }, { status: 503 });
+    }
 
-  const response = NextResponse.json({ ok: true });
-  response.cookies.set(SALES_SESSION_COOKIE, session.value, salesSessionOptions);
-  return response;
+    if (!(await salesCredentialsMatch(username, password))) {
+      return NextResponse.json({ error: "That username or password is not recognized." }, { status: 401 });
+    }
+
+    const session = await createSalesSession();
+    if (!session) return NextResponse.json({ error: "Sales access has not been configured." }, { status: 503 });
+
+    const response = NextResponse.json({ ok: true });
+    response.cookies.set(SALES_SESSION_COOKIE, session.value, salesSessionOptions);
+    return response;
+  } catch (error) {
+    console.error("Could not verify salesperson credentials:", error);
+    return NextResponse.json({ error: "Sales sign-in is temporarily unavailable." }, { status: 503 });
+  }
 }
 
 export async function DELETE() {

@@ -181,3 +181,13 @@ model AdminCredential {
 
   @@map("admin_credentials")
 }
+
+model SalesCredential {
+  id             String   @id @default("sales")
+  username       String   @unique
+  passwordHash   String   @map("password_hash")
+  sessionVersion Int      @default(0) @map("session_version")
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("sales_credentials")
+}

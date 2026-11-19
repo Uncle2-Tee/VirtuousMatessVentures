@@ -49,9 +49,9 @@ On Vercel or another serverless host, add these variables in the project’s pro
 
 ## Sales desk
 
-The private salesperson workspace is available at `/sales`. Configure a dedicated shared sales login using `SALES_USERNAME` and `SALES_PASSWORD` in `.env.local` for local development and in the hosting provider's environment for production. Sales sessions use the existing `ADMIN_SESSION_SECRET`; no admin credentials are shared with the sales account. Restart the app after changing environment variables.
+The private salesperson workspace is available at `/sales`. Until an admin configures the sales login on `/admin`, `SALES_USERNAME` and `SALES_PASSWORD` in `.env.local` (or the hosting provider's environment) provide the bootstrap login. From the admin dashboard's **Manage passwords** section, select the admin or salesperson account to update its credentials. The salesperson password is scrypt-hashed, and changing credentials invalidates existing sales sessions. Sales sessions use the existing `ADMIN_SESSION_SECRET`; no admin credentials are shared with the sales account.
 
-Sales staff can search the live catalogue, record counter sales paid by cash, Mobile Money, or card, and see recent transactions and daily totals. Each sale records the signed-in salesperson, snapshots item names and prices, and deducts inventory atomically; insufficient stock prevents the sale. Admins can review recent in-store sales and daily totals on `/admin`. The `sales_transactions` table is included in the Prisma schema and row-level-security setup. Apply the schema and RLS update before using the sales desk:
+Sales staff can search the live catalogue, record counter sales paid by cash, Mobile Money, or card, and see recent transactions and daily totals. Each sale records the signed-in salesperson, snapshots item names and prices, and deducts inventory atomically; insufficient stock prevents the sale. Admins can review recent in-store sales and daily totals on `/admin`. The `sales_transactions` and `sales_credentials` tables are included in the Prisma schema and row-level-security setup. Apply the schema and RLS update before using the sales desk:
 
 ```bash
 npx prisma db push

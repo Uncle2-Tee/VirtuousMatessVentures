@@ -245,6 +245,5 @@ export default function SalesDashboard({ username, showAdminReturn = false, read
       {dashboard?.recentSales.length ? <div className="sales-history-table-wrap"><table className="sales-history-table"><thead><tr><th>Receipt</th><th>Items</th><th>Payment</th><th>Recorded by</th><th>Time</th><th className="sales-table-amount">Total</th>{!readOnly && <th>Action</th>}</tr></thead><tbody>{dashboard.recentSales.map((sale) => <tr key={sale.id}><td><span className="sales-receipt-id">#{sale.id.slice(0, 8).toUpperCase()}</span></td><td>{sale.items.map((item) => `${item.name} × ${item.quantity}`).join(", ")}</td><td>{paymentLabels[sale.payment_method] || sale.payment_method}</td><td>{sale.salesperson}</td><td>{formatSaleTime(sale.created_at)}</td><td className="sales-table-amount">{money.format(sale.subtotal)}</td>{!readOnly && <td><button className="sales-history-receipt-button" type="button" onClick={() => { setCompletedSale(sale); window.scrollTo({ top: 0, behavior: "smooth" }); }}>Issue receipt</button></td>}</tr>)}</tbody></table></div>
         : <div className="sales-history-empty">{loading ? "Loading recent sales…" : "No in-store sales have been recorded yet."}</div>}
     </section>
-    <footer className="sales-footer"><span>Virtuous Matess Ventures</span><span>Accurate records. Thoughtful service.</span></footer>
   </main>;
 }

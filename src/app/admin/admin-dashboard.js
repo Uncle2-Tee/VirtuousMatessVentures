@@ -82,15 +82,20 @@ export default function AdminDashboard({ username }) {
   const [uploadingImage, setUploadingImage] = useState(false);
   const [databaseReady, setDatabaseReady] = useState(false);
   const [stockRefreshError, setStockRefreshError] = useState("");
-  const [passwordPanelOpen, setPasswordPanelOpen] = useState(false);
+  const [securityPanelOpen, setSecurityPanelOpen] = useState(false);
+  const [credentialTarget, setCredentialTarget] = useState("admin");
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [passwordSaving, setPasswordSaving] = useState(false);
-  const [passwordFeedback, setPasswordFeedback] = useState(null);
+  const [securitySaving, setSecuritySaving] = useState(false);
+  const [securityFeedback, setSecurityFeedback] = useState(null);
+  const [salesUsername, setSalesUsername] = useState("");
+  const [salesPassword, setSalesPassword] = useState("");
+  const [salesPasswordConfirm, setSalesPasswordConfirm] = useState("");
+  const [salesAccessLoading, setSalesAccessLoading] = useState(false);
   const knownLowStockProductIds = useRef(null);
   const router = useRouter();
 
@@ -155,6 +160,23 @@ export default function AdminDashboard({ username }) {
       document.removeEventListener("visibilitychange", refreshWhenVisible);
     };
   }, [catalogueRetryKey]);
+
+  useEffect(() => {
+    if (!securityPanelOpen || credentialTarget !== "sales") return undefined;
+    let active = true;
+    void fetch("/api/admin/sales-credentials", { cache: "no-store" })
+      .then(readApiResponse)
+      .then(({ username: savedUsername }) => {
+        if (active) setSalesUsername(savedUsername);
+      })
+      .catch((error) => {
+        if (active) setSecurityFeedback({ type: "error", message: error.message || "Could not load sales login settings." });
+      })
+      .finally(() => {
+        if (active) setSalesAccessLoading(false);
+      });
+    return () => { active = false; };
+  }, [securityPanelOpen, credentialTarget]);
 
   useEffect(() => {
     if (!message || !databaseReady) return;
@@ -343,29 +365,73 @@ export default function AdminDashboard({ username }) {
     router.refresh();
   }
 
-  function togglePasswordPanel() {
-    const nextOpen = !passwordPanelOpen;
-    setPasswordPanelOpen(nextOpen);
-    setPasswordFeedback(null);
+  function toggleSecurityPanel() {
+    const nextOpen = !securityPanelOpen;
+    setSecurityPanelOpen(nextOpen);
+    setSalesAccessLoading(nextOpen && credentialTarget === "sales");
+    setSecurityFeedback(null);
     if (!nextOpen) {
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
+      setSalesPassword("");
+      setSalesPasswordConfirm("");
       setShowCurrentPassword(false);
       setShowNewPassword(false);
       setShowConfirmPassword(false);
     }
   }
 
-  async function updateAdminPassword(event) {
+  function changeCredentialTarget(event) {
+    const target = event.target.value;
+    setCredentialTarget(target);
+    setSalesAccessLoading(target === "sales");
+    setSecurityFeedback(null);
+    setCurrentPassword("");
+    setNewPassword("");
+    setConfirmPassword("");
+    setSalesPassword("");
+    setSalesPasswordConfirm("");
+    setShowCurrentPassword(false);
+    setShowNewPassword(false);
+    setShowConfirmPassword(false);
+  }
+
+  async function updateSalesLogin(event) {
     event.preventDefault();
-    setPasswordFeedback(null);
-    if (newPassword !== confirmPassword) {
-      setPasswordFeedback({ type: "error", message: "The new passwords do not match." });
+    setSecurityFeedback(null);
+    if (salesPassword !== salesPasswordConfirm) {
+      setSecurityFeedback({ type: "error", message: "The new passwords do not match." });
       return;
     }
 
-    setPasswordSaving(true);
+    setSecuritySaving(true);
+    try {
+      const { username: savedUsername } = await readApiResponse(await fetch("/api/admin/sales-credentials", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: salesUsername, password: salesPassword }),
+      }));
+      setSalesUsername(savedUsername);
+      setSalesPassword("");
+      setSalesPasswordConfirm("");
+      setSecurityFeedback({ type: "success", message: "Salesperson login updated. Existing salesperson sessions have been signed out." });
+    } catch (error) {
+      setSecurityFeedback({ type: "error", message: error.message || "Could not update sales login settings." });
+    } finally {
+      setSecuritySaving(false);
+    }
+  }
+
+  async function updateAdminPassword(event) {
+    event.preventDefault();
+    setSecurityFeedback(null);
+    if (newPassword !== confirmPassword) {
+      setSecurityFeedback({ type: "error", message: "The new passwords do not match." });
+      return;
+    }
+
+    setSecuritySaving(true);
     try {
       await readApiResponse(await fetch("/api/admin/password", {
         method: "POST",
@@ -378,39 +444,65 @@ export default function AdminDashboard({ username }) {
       setShowCurrentPassword(false);
       setShowNewPassword(false);
       setShowConfirmPassword(false);
-      setPasswordFeedback({ type: "success", message: "Password updated. Other admin sessions have been signed out." });
+      setSecurityFeedback({ type: "success", message: "Admin password updated. Other admin sessions have been signed out." });
     } catch (error) {
-      setPasswordFeedback({ type: "error", message: error.message || "Could not update the password." });
+      setSecurityFeedback({ type: "error", message: error.message || "Could not update the password." });
     } finally {
-      setPasswordSaving(false);
+      setSecuritySaving(false);
     }
   }
 
   return <main className="dashboard-shell">
-    <header className="dashboard-header"><div className="dashboard-brand-logo"><BrandWordmark /></div><div className="dashboard-header-actions"><span className="secure-status">● Signed in as {username}</span><Link className="dashboard-sales-button" href="/sales?from=admin">Sales dashboard</Link><button type="button" className="dashboard-password-toggle" onClick={togglePasswordPanel} aria-expanded={passwordPanelOpen} aria-controls="admin-password-panel"><LockResetIcon fontSize="small" aria-hidden="true" />Change password</button><button onClick={signOut}>Sign out</button></div></header>
-    {passwordPanelOpen && <section className="admin-password-panel" id="admin-password-panel" aria-labelledby="admin-password-heading">
+    <header className="dashboard-header"><div className="dashboard-brand-logo"><BrandWordmark /></div><div className="dashboard-header-actions"><span className="secure-status">● Signed in as {username}</span><Link className="dashboard-sales-button" href="/sales?from=admin">Sales dashboard</Link><button type="button" className="dashboard-password-toggle" onClick={toggleSecurityPanel} aria-expanded={securityPanelOpen} aria-controls="admin-password-panel"><LockResetIcon fontSize="small" aria-hidden="true" />Manage passwords</button><button onClick={signOut}>Sign out</button></div></header>
+    {securityPanelOpen && <section className="admin-password-panel" id="admin-password-panel" aria-labelledby="admin-password-heading">
       <div className="admin-password-panel-heading">
-        <div><p className="atelier-kicker">Security</p><h2 id="admin-password-heading">Change password</h2></div>
-        <button type="button" className="admin-password-close" onClick={togglePasswordPanel} aria-label="Close change password form"><CloseIcon fontSize="small" /></button>
+        <div><p className="atelier-kicker">Account security</p><h2 id="admin-password-heading">Manage account credentials</h2></div>
+        <button type="button" className="admin-password-close" onClick={toggleSecurityPanel} aria-label="Close credential settings"><CloseIcon fontSize="small" /></button>
       </div>
-      <form className="admin-password-form" onSubmit={updateAdminPassword}>
-        <div className="admin-password-fields">
-          <div className="admin-password-field">
-            <label htmlFor="admin-current-password">Current password</label>
-            <span className="admin-password-input"><input id="admin-current-password" type={showCurrentPassword ? "text" : "password"} value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} autoComplete="current-password" placeholder="Enter your current password" required /><button type="button" className="admin-password-visibility" onClick={() => setShowCurrentPassword((visible) => !visible)} aria-label={showCurrentPassword ? "Hide current password" : "Show current password"} aria-pressed={showCurrentPassword}>{showCurrentPassword ? <VisibilityOffIcon aria-hidden="true" /> : <VisibilityIcon aria-hidden="true" />}</button></span>
-          </div>
-          <div className="admin-password-field">
-            <label htmlFor="admin-new-password">New password</label>
-            <span className="admin-password-input"><input id="admin-new-password" type={showNewPassword ? "text" : "password"} value={newPassword} onChange={(event) => setNewPassword(event.target.value)} autoComplete="new-password" placeholder="At least 8 characters" minLength={8} maxLength={128} required /><button type="button" className="admin-password-visibility" onClick={() => setShowNewPassword((visible) => !visible)} aria-label={showNewPassword ? "Hide new password" : "Show new password"} aria-pressed={showNewPassword}>{showNewPassword ? <VisibilityOffIcon aria-hidden="true" /> : <VisibilityIcon aria-hidden="true" />}</button></span>
-          </div>
-          <div className="admin-password-field">
-            <label htmlFor="admin-confirm-password">Confirm new password</label>
-            <span className="admin-password-input"><input id="admin-confirm-password" type={showConfirmPassword ? "text" : "password"} value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} autoComplete="new-password" placeholder="Re-enter your new password" minLength={8} maxLength={128} required /><button type="button" className="admin-password-visibility" onClick={() => setShowConfirmPassword((visible) => !visible)} aria-label={showConfirmPassword ? "Hide confirmation password" : "Show confirmation password"} aria-pressed={showConfirmPassword}>{showConfirmPassword ? <VisibilityOffIcon aria-hidden="true" /> : <VisibilityIcon aria-hidden="true" />}</button></span>
-          </div>
+      <div className="admin-password-form">
+        <div className="admin-password-field admin-password-target">
+          <label htmlFor="credential-target">Choose account</label>
+          <select id="credential-target" value={credentialTarget} onChange={changeCredentialTarget} disabled={securitySaving}>
+            <option value="admin">Admin account</option>
+            <option value="sales">Salesperson account</option>
+          </select>
         </div>
-        {passwordFeedback && <p className={`admin-password-feedback ${passwordFeedback.type}`} role={passwordFeedback.type === "error" ? "alert" : "status"}>{passwordFeedback.message}</p>}
-        <div className="admin-password-actions"><p>Use 8 to 12 characters. Other admin sessions will be signed out.</p><button type="submit" disabled={passwordSaving}><LockResetIcon fontSize="small" aria-hidden="true" />{passwordSaving ? "Updating…" : "Update password"}</button></div>
-      </form>
+        {credentialTarget === "admin" ? <form onSubmit={updateAdminPassword}>
+          <div className="admin-password-fields">
+            <div className="admin-password-field">
+              <label htmlFor="admin-current-password">Current admin password</label>
+              <span className="admin-password-input"><input id="admin-current-password" type={showCurrentPassword ? "text" : "password"} value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} autoComplete="current-password" placeholder="Enter your current password" required /><button type="button" className="admin-password-visibility" onClick={() => setShowCurrentPassword((visible) => !visible)} aria-label={showCurrentPassword ? "Hide current password" : "Show current password"} aria-pressed={showCurrentPassword}>{showCurrentPassword ? <VisibilityOffIcon aria-hidden="true" /> : <VisibilityIcon aria-hidden="true" />}</button></span>
+            </div>
+            <div className="admin-password-field">
+              <label htmlFor="admin-new-password">New admin password</label>
+              <span className="admin-password-input"><input id="admin-new-password" type={showNewPassword ? "text" : "password"} value={newPassword} onChange={(event) => setNewPassword(event.target.value)} autoComplete="new-password" placeholder="At least 8 characters" minLength={8} maxLength={128} required /><button type="button" className="admin-password-visibility" onClick={() => setShowNewPassword((visible) => !visible)} aria-label={showNewPassword ? "Hide new password" : "Show new password"} aria-pressed={showNewPassword}>{showNewPassword ? <VisibilityOffIcon aria-hidden="true" /> : <VisibilityIcon aria-hidden="true" />}</button></span>
+            </div>
+            <div className="admin-password-field">
+              <label htmlFor="admin-confirm-password">Confirm new password</label>
+              <span className="admin-password-input"><input id="admin-confirm-password" type={showConfirmPassword ? "text" : "password"} value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} autoComplete="new-password" placeholder="Re-enter your new password" minLength={8} maxLength={128} required /><button type="button" className="admin-password-visibility" onClick={() => setShowConfirmPassword((visible) => !visible)} aria-label={showConfirmPassword ? "Hide confirmation password" : "Show confirmation password"} aria-pressed={showConfirmPassword}>{showConfirmPassword ? <VisibilityOffIcon aria-hidden="true" /> : <VisibilityIcon aria-hidden="true" />}</button></span>
+            </div>
+          </div>
+          {securityFeedback && <p className={`admin-password-feedback ${securityFeedback.type}`} role={securityFeedback.type === "error" ? "alert" : "status"}>{securityFeedback.message}</p>}
+          <div className="admin-password-actions"><p>Confirm your current password to change admin access. Other admin sessions will be signed out.</p><button type="submit" disabled={securitySaving}><LockResetIcon fontSize="small" aria-hidden="true" />{securitySaving ? "Updating…" : "Update admin password"}</button></div>
+        </form> : <form onSubmit={updateSalesLogin}>
+          <div className="admin-password-fields admin-sales-credential-fields">
+            <div className="admin-password-field">
+              <label htmlFor="sales-login-username">Salesperson username</label>
+              <input id="sales-login-username" type="text" value={salesUsername} onChange={(event) => setSalesUsername(event.target.value)} minLength={3} maxLength={32} pattern="[A-Za-z0-9._-]{3,32}" autoComplete="username" placeholder={salesAccessLoading ? "Loading current username…" : "Enter a sales username"} required disabled={salesAccessLoading || securitySaving} />
+            </div>
+            <div className="admin-password-field">
+              <label htmlFor="sales-login-password">New salesperson password</label>
+              <input id="sales-login-password" type="password" value={salesPassword} onChange={(event) => setSalesPassword(event.target.value)} minLength={8} maxLength={128} autoComplete="new-password" placeholder="Use at least 8 characters" required disabled={salesAccessLoading || securitySaving} />
+            </div>
+            <div className="admin-password-field">
+              <label htmlFor="sales-login-confirm-password">Confirm new password</label>
+              <input id="sales-login-confirm-password" type="password" value={salesPasswordConfirm} onChange={(event) => setSalesPasswordConfirm(event.target.value)} minLength={8} maxLength={128} autoComplete="new-password" placeholder="Re-enter the password" required disabled={salesAccessLoading || securitySaving} />
+            </div>
+          </div>
+          {securityFeedback && <p className={`admin-password-feedback ${securityFeedback.type}`} role={securityFeedback.type === "error" ? "alert" : "status"}>{securityFeedback.message}</p>}
+          <div className="admin-password-actions"><p>Use a 3–32 character username and 8–128 character password. Updating access signs out active salesperson sessions.</p><button type="submit" disabled={salesAccessLoading || securitySaving}><LockResetIcon fontSize="small" aria-hidden="true" />{securitySaving ? "Updating…" : "Update salesperson credentials"}</button></div>
+        </form>}
+      </div>
     </section>}
     <section className="dashboard-heading"><p className="atelier-kicker">Store administration</p><h1>{greeting}</h1><p>Keep your collection polished, current, and ready to shop.</p></section>
     {message && !databaseReady && <p className="database-warning" role="alert">{message} Check DATABASE_URL in your environment and run `npx prisma db push` if the schema has not been applied.</p>}

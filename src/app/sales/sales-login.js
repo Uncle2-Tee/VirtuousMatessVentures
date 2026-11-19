@@ -56,8 +56,8 @@ export default function SalesLogin({ configured }) {
         <button className="sales-login-submit" type="submit" disabled={submitting}>{submitting ? "Signing in…" : "Sign in to sales desk"}<span aria-hidden="true">→</span></button>
         <p className="sales-login-security">Private, secure access for store staff.</p>
       </form> : <div className="sales-setup-note">
-        <strong>Finish sales desk setup</strong>
-        <p>Set <code>SALES_USERNAME</code> and <code>SALES_PASSWORD</code> in <code>.env.local</code> for local development and in your hosting environment for production. Use a unique password and restart the app after changing these values.</p>
+        <strong>Sales desk access is not set up</strong>
+        <p>Ask an administrator to configure the salesperson username and password from the admin dashboard.</p>
       </div>}
       <Link className="sales-login-return" href="/">← Return to storefront</Link>
     </section>

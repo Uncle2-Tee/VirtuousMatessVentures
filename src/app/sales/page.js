@@ -12,7 +12,7 @@ export const metadata = {
 
 export default async function SalesPage({ searchParams }) {
   const cookieStore = await cookies();
-  const username = getSalesSessionUsername(cookieStore.get(SALES_SESSION_COOKIE)?.value);
+  const username = await getSalesSessionUsername(cookieStore.get(SALES_SESSION_COOKIE)?.value);
   const adminSession = cookieStore.get(ADMIN_SESSION_COOKIE)?.value;
   const isAdmin = await hasValidAdminSession(adminSession);
   const { from } = await searchParams;
@@ -22,7 +22,6 @@ export default async function SalesPage({ searchParams }) {
     return <SalesDashboard username={getAdminSessionUsername(adminSession)} showAdminReturn readOnly />;
   }
 
-  return username
-    ? <SalesDashboard username={username} />
-    : <SalesLogin configured={isSalesAuthConfigured()} />;
+  if (username) return <SalesDashboard username={username} />;
+  return <SalesLogin configured={await isSalesAuthConfigured()} />;
 }

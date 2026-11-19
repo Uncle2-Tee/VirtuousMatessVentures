@@ -9,3 +9,4 @@ ALTER TABLE public.customer_auth_throttles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.product_images ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.homepage_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.admin_credentials ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.sales_credentials ENABLE ROW LEVEL SECURITY;
