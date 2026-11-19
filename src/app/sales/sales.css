@@ -15,13 +15,13 @@
 }
 .sales-login-card {
   width:min(460px,100%);
-  padding:44px;
+  padding:32px;
   border:1px solid var(--atelier-line);
   border-radius:14px;
   background:var(--atelier-gradient-card);
   box-shadow:0 22px 70px rgba(36,47,39,.12);
 }
-.sales-login-logo { display:block; margin-bottom:48px; }
+.sales-login-logo { display:block; margin-bottom:20px; }
 .sales-eyebrow {
   margin:0;
   color:var(--atelier-orange-dark);
@@ -32,14 +32,15 @@
 }
 .sales-login-card .sales-eyebrow { text-align:center; }
 .sales-login-intro {
-  margin:16px 0 28px;
+  margin:8px 0 16px;
   color:var(--atelier-muted);
   font-size:13px;
   line-height:1.6;
+  text-align:center;
 }
 .sales-login-form label {
   display:block;
-  margin:17px 0 7px;
+  margin:12px 0 5px;
   color:var(--atelier-muted);
   font-size:10px;
   font-weight:600;
@@ -78,7 +79,7 @@
   display:flex;
   align-items:center;
   justify-content:center;
-  margin-top:24px;
+  margin-top:16px;
   padding:0 18px;
   border:1px solid #211d19;
   border-radius:999px;
@@ -97,13 +98,11 @@
 .sales-login-submit:focus-visible { outline:2px solid #c5521b; outline-offset:3px; }
 .sales-login-submit:disabled { opacity:.65; cursor:wait; }
 .sales-login-error { color:#b42318; font-size:12px; }
-.sales-login-security { margin:14px 0 0; color:var(--atelier-muted); font-size:10px; text-align:center; }
-.sales-setup-note { padding:16px; border:1px solid var(--atelier-line); background:#fff; font-size:12px; line-height:1.6; }
+.sales-login-security { margin:10px 0 0; color:var(--atelier-muted); font-size:10px; text-align:center; }
+.sales-setup-note { padding:12px; border:1px solid var(--atelier-line); background:#fff; font-size:12px; line-height:1.6; }
 .sales-setup-note strong { display:block; margin-bottom:5px; font-size:10px; letter-spacing:.08em; text-transform:uppercase; }
 .sales-setup-note p { margin:0; color:var(--atelier-muted); }
 .sales-setup-note code { padding:1px 3px; background:#fff0e5; color:#7c2d12; }
-.sales-login-return { display:inline-block; margin-top:28px; color:var(--atelier-muted); font-size:10px; letter-spacing:.07em; text-decoration:none; text-transform:uppercase; }
-.sales-login-return:hover { color:var(--atelier-orange-dark); }
 
 .sales-shell {
   --sales-ink:#211d19;
@@ -373,7 +372,12 @@
   .sales-receipt-meta { grid-template-columns:repeat(2,minmax(0,1fr)); }
 }
 @media (max-width:420px) {
-  .sales-login-card { padding:32px 24px; }
+  .sales-login-card { width:min(320px,100%); padding:20px 18px; }
+  .sales-login-logo { margin-bottom:16px; }
+  .sales-login-intro { margin:6px 0 12px; }
+  .sales-login-form label { margin:10px 0 4px; }
+  .sales-login-submit { min-height:48px; margin-top:12px; }
+  .sales-login-security { margin-top:8px; }
   .sales-header .atelier-brand.brand-mark .brand-word { font-size:19px; }
   .sales-user { max-width:86px; overflow:hidden; font-size:10px; text-overflow:ellipsis; white-space:nowrap; }
   .sales-admin-return { font-size:9px; }

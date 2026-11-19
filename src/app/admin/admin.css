@@ -341,7 +341,17 @@
   .catalog-editors { grid-template-columns:minmax(0,1fr); padding-left:0; }
   .catalog-price-editor { min-width:0; }
   .catalog-price-editor>div { max-width:none; }
-  .catalog-item .catalog-save-button { justify-self:stretch; }
+  .catalog-item .catalog-save-button {
+    width:100%;
+    min-width:0;
+    min-height:44px;
+    justify-self:stretch;
+    padding:10px 14px;
+    font-size:12px;
+    line-height:1.2;
+    letter-spacing:.04em;
+    white-space:normal;
+  }
 }
 
 .atelier-shell {

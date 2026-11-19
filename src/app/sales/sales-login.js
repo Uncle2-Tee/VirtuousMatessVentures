@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import VisibilityIcon from "@mui/icons-material/VisibilityOutlined";
 import VisibilityOffIcon from "@mui/icons-material/VisibilityOffOutlined";
 import BrandWordmark from "../components/brand-wordmark";
@@ -40,7 +39,7 @@ export default function SalesLogin({ configured }) {
     <section className="sales-login-card" aria-label="Salesperson sign in">
       <BrandWordmark className="sales-login-logo" />
       <p className="sales-eyebrow">Sales desk</p>
-      <p className="sales-login-intro">{configured ? "Sign in to serve customers and record today’s sales." : "Sales desk access needs to be configured before a team member can sign in."}</p>
+      <p className="sales-login-intro">{configured ? "Sign in to serve customers." : "Sales desk access needs to be configured before a team member can sign in."}</p>
       {configured ? <form className="sales-login-form" onSubmit={submit}>
         <label htmlFor="sales-username">Username</label>
         <input id="sales-username" type="text" value={username} onChange={(event) => setUsername(event.target.value)} required autoComplete="username" autoFocus placeholder="Enter your sales username" />
@@ -58,7 +57,6 @@ export default function SalesLogin({ configured }) {
         <strong>Sales desk access is not set up</strong>
         <p>Ask an administrator to configure the salesperson username and password from the admin dashboard.</p>
       </div>}
-      <Link className="sales-login-return" href="/">← Return to storefront</Link>
     </section>
   </main>;
 }
