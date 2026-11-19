@@ -106,7 +106,7 @@
   .listing-dropdown-note { font-size:9px; }
   .catalog-dropdown .catalog-list { margin:0 8px; }
   .catalog-item { grid-template-columns:48px minmax(0,1fr) auto; }
-  .catalog-price-editor { grid-column:2 / -1; min-width:0; }
+  .catalog-price-editor { min-width:0; }
   .catalog-price-editor>div { max-width:260px; }
   .catalog-remove-button { grid-column:3; grid-row:1; align-self:center; margin:0; }
 }
