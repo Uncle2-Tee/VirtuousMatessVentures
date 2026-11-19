@@ -95,6 +95,8 @@ export default function AdminDashboard({ username }) {
   const [salesUsername, setSalesUsername] = useState("");
   const [salesPassword, setSalesPassword] = useState("");
   const [salesPasswordConfirm, setSalesPasswordConfirm] = useState("");
+  const [showSalesPassword, setShowSalesPassword] = useState(false);
+  const [showSalesPasswordConfirm, setShowSalesPasswordConfirm] = useState(false);
   const [salesAccessLoading, setSalesAccessLoading] = useState(false);
   const knownLowStockProductIds = useRef(null);
   const router = useRouter();
@@ -376,6 +378,8 @@ export default function AdminDashboard({ username }) {
       setConfirmPassword("");
       setSalesPassword("");
       setSalesPasswordConfirm("");
+      setShowSalesPassword(false);
+      setShowSalesPasswordConfirm(false);
       setShowCurrentPassword(false);
       setShowNewPassword(false);
       setShowConfirmPassword(false);
@@ -392,6 +396,8 @@ export default function AdminDashboard({ username }) {
     setConfirmPassword("");
     setSalesPassword("");
     setSalesPasswordConfirm("");
+    setShowSalesPassword(false);
+    setShowSalesPasswordConfirm(false);
     setShowCurrentPassword(false);
     setShowNewPassword(false);
     setShowConfirmPassword(false);
@@ -415,6 +421,8 @@ export default function AdminDashboard({ username }) {
       setSalesUsername(savedUsername);
       setSalesPassword("");
       setSalesPasswordConfirm("");
+      setShowSalesPassword(false);
+      setShowSalesPasswordConfirm(false);
       setSecurityFeedback({ type: "success", message: "Salesperson login updated. Existing salesperson sessions have been signed out." });
     } catch (error) {
       setSecurityFeedback({ type: "error", message: error.message || "Could not update sales login settings." });
@@ -492,11 +500,11 @@ export default function AdminDashboard({ username }) {
             </div>
             <div className="admin-password-field">
               <label htmlFor="sales-login-password">New salesperson password</label>
-              <input id="sales-login-password" type="password" value={salesPassword} onChange={(event) => setSalesPassword(event.target.value)} minLength={8} maxLength={128} autoComplete="new-password" placeholder="Use at least 8 characters" required disabled={salesAccessLoading || securitySaving} />
+              <span className="admin-password-input"><input id="sales-login-password" type={showSalesPassword ? "text" : "password"} value={salesPassword} onChange={(event) => setSalesPassword(event.target.value)} minLength={8} maxLength={128} autoComplete="new-password" placeholder="Use at least 8 characters" required disabled={salesAccessLoading || securitySaving} /><button type="button" className="admin-password-visibility" onClick={() => setShowSalesPassword((visible) => !visible)} aria-label={showSalesPassword ? "Hide salesperson password" : "Show salesperson password"} aria-pressed={showSalesPassword} disabled={salesAccessLoading || securitySaving}>{showSalesPassword ? <VisibilityOffIcon aria-hidden="true" /> : <VisibilityIcon aria-hidden="true" />}</button></span>
             </div>
             <div className="admin-password-field">
               <label htmlFor="sales-login-confirm-password">Confirm new password</label>
-              <input id="sales-login-confirm-password" type="password" value={salesPasswordConfirm} onChange={(event) => setSalesPasswordConfirm(event.target.value)} minLength={8} maxLength={128} autoComplete="new-password" placeholder="Re-enter the password" required disabled={salesAccessLoading || securitySaving} />
+              <span className="admin-password-input"><input id="sales-login-confirm-password" type={showSalesPasswordConfirm ? "text" : "password"} value={salesPasswordConfirm} onChange={(event) => setSalesPasswordConfirm(event.target.value)} minLength={8} maxLength={128} autoComplete="new-password" placeholder="Re-enter the password" required disabled={salesAccessLoading || securitySaving} /><button type="button" className="admin-password-visibility" onClick={() => setShowSalesPasswordConfirm((visible) => !visible)} aria-label={showSalesPasswordConfirm ? "Hide password confirmation" : "Show password confirmation"} aria-pressed={showSalesPasswordConfirm} disabled={salesAccessLoading || securitySaving}>{showSalesPasswordConfirm ? <VisibilityOffIcon aria-hidden="true" /> : <VisibilityIcon aria-hidden="true" />}</button></span>
             </div>
           </div>
           {securityFeedback && <p className={`admin-password-feedback ${securityFeedback.type}`} role={securityFeedback.type === "error" ? "alert" : "status"}>{securityFeedback.message}</p>}

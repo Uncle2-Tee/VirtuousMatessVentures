@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { ADMIN_SESSION_COOKIE, hasValidAdminSession } from "../../../../lib/admin-auth";
 import { prisma } from "../../../../lib/prisma";
+import { orderToSalesApi } from "../../../../lib/sales-orders";
 
 export const runtime = "nodejs";
 
@@ -17,7 +18,7 @@ export async function GET() {
   try {
     const startOfDay = new Date();
     startOfDay.setUTCHours(0, 0, 0, 0);
-    const [todaySales, recentSales, products] = await Promise.all([
+    const [todaySales, recentSales, products, onlineOrders] = await Promise.all([
       prisma.salesTransaction.aggregate({
         where: { createdAt: { gte: startOfDay } },
         _count: { _all: true },
@@ -27,6 +28,23 @@ export async function GET() {
       prisma.product.findMany({
         orderBy: [{ category: "asc" }, { name: "asc" }],
         select: { id: true, name: true, category: true, size: true, price: true, stockQuantity: true, image: true },
+      }),
+      prisma.order.findMany({
+        where: { status: { not: "awaiting_payment" } },
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          status: true,
+          paymentMethod: true,
+          items: true,
+          subtotal: true,
+          shipping: true,
+          total: true,
+          customerName: true,
+          phone: true,
+          shippingAddress: true,
+          createdAt: true,
+        },
       }),
     ]);
     const sales = recentSales.map((sale) => ({
@@ -45,6 +63,7 @@ export async function GET() {
       sales,
       recentSales: sales.slice(0, 20),
       products: products.map((product) => ({ ...product, price: Number(product.price) })),
+      onlineOrders: onlineOrders.map(orderToSalesApi),
       lowStockCount: products.filter((product) => product.stockQuantity <= 5).length,
     });
   } catch (error) {

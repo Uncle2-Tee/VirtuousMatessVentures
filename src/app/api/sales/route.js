@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { InsufficientStockError, reserveProductStock } from "../../../lib/inventory";
 import { isTransientDatabaseError } from "../../../lib/database-retry";
 import { prisma } from "../../../lib/prisma";
+import { orderToSalesApi } from "../../../lib/sales-orders";
 import { SALES_SESSION_COOKIE, getSalesSessionUsername } from "../../../lib/sales-auth";
 
 export const runtime = "nodejs";
@@ -40,7 +41,7 @@ export async function GET() {
   try {
     const startOfDay = new Date();
     startOfDay.setUTCHours(0, 0, 0, 0);
-    const [products, todaySales, recentSales] = await Promise.all([
+    const [products, todaySales, recentSales, onlineOrders] = await Promise.all([
       prisma.product.findMany({
         orderBy: [{ category: "asc" }, { name: "asc" }],
         select: { id: true, name: true, category: true, size: true, price: true, stockQuantity: true, image: true },
@@ -51,6 +52,23 @@ export async function GET() {
         _sum: { subtotal: true },
       }),
       prisma.salesTransaction.findMany({ orderBy: { createdAt: "desc" }, take: 20 }),
+      prisma.order.findMany({
+        where: { status: { not: "awaiting_payment" } },
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          status: true,
+          paymentMethod: true,
+          items: true,
+          subtotal: true,
+          shipping: true,
+          total: true,
+          customerName: true,
+          phone: true,
+          shippingAddress: true,
+          createdAt: true,
+        },
+      }),
     ]);
 
     return NextResponse.json({
@@ -60,6 +78,7 @@ export async function GET() {
         revenue: Number(todaySales._sum.subtotal || 0),
       },
       recentSales: recentSales.map(salesTransactionToApi),
+      onlineOrders: onlineOrders.map(orderToSalesApi),
       lowStockCount: products.filter((product) => product.stockQuantity <= 5).length,
     });
   } catch (error) {

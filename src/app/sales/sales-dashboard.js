@@ -8,6 +8,14 @@ import BrandWordmark from "../components/brand-wordmark";
 const money = new Intl.NumberFormat("en-GH", { style: "currency", currency: "GHS", minimumFractionDigits: 2 });
 const quantityFormatter = new Intl.NumberFormat("en-GH");
 const paymentLabels = { cash: "Cash", mobile_money: "Mobile Money", card: "Card" };
+const orderPaymentLabels = { paystack: "Paystack", momo: "Mobile Money", cash: "Cash", card: "Card" };
+const orderStatusLabels = {
+  payment_review: "Awaiting processing",
+  processing: "Processing",
+  shipped: "Shipped",
+  delivered: "Delivered",
+  cancelled: "Cancelled",
+};
 const DASHBOARD_REFRESH_INTERVAL_MS = 10_000;
 
 async function readApiResponse(response) {
@@ -18,6 +26,33 @@ async function readApiResponse(response) {
 
 function formatSaleTime(value) {
   return new Intl.DateTimeFormat("en-GH", { hour: "numeric", minute: "2-digit" }).format(new Date(value));
+}
+
+function formatOrderTime(value) {
+  return new Intl.DateTimeFormat("en-GH", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
+}
+
+function OnlineOrderCard({ order }) {
+  const statusLabel = orderStatusLabels[order.status] || order.status.replaceAll("_", " ");
+
+  return <article className="sales-order-card">
+    <header className="sales-order-card-heading">
+      <div><span className="sales-order-number">Order #{order.id.slice(0, 8).toUpperCase()}</span><time dateTime={order.created_at}>{formatOrderTime(order.created_at)}</time></div>
+      <span className={`sales-order-status sales-order-status-${orderStatusLabels[order.status] ? order.status : "other"}`}>{statusLabel}</span>
+    </header>
+    <div className="sales-order-customer"><strong>{order.customer_name}</strong><span>{order.phone}</span></div>
+    <ul className="sales-order-items">{order.items.map((item, index) => (
+      <li key={`${item.product_id || item.name}-${index}`}><span>{item.name} <small>× {quantityFormatter.format(item.quantity)}</small></span><strong>{money.format(Number(item.line_total ?? Number(item.price) * item.quantity))}</strong></li>
+    ))}</ul>
+    <div className="sales-order-card-footer">
+      <span>{orderPaymentLabels[order.payment_method] || order.payment_method.replaceAll("_", " ")}</span>
+      <div><small>Order total</small><strong>{money.format(order.total)}</strong></div>
+    </div>
+    <details className="sales-order-delivery">
+      <summary>Delivery details</summary>
+      <address>{order.shipping_address}</address>
+    </details>
+  </article>;
 }
 
 function SaleReceiptCopy({ sale, headingId }) {
@@ -205,6 +240,12 @@ export default function SalesDashboard({ username, showAdminReturn = false, read
     {loadError && <p className="sales-banner sales-banner-error" role="alert">{loadError}<button type="button" onClick={() => { setLoading(true); void refreshDashboard(); }}>Retry</button></p>}
     {saleNotice && <p className="sales-banner sales-banner-success" role="status">{saleNotice}</p>}
     {completedSale && <SaleReceipt sale={completedSale} onPrint={() => window.print()} onClose={() => setCompletedSale(null)} />}
+
+    <section className="sales-orders-panel" aria-labelledby="sales-orders-heading">
+      <div className="sales-section-heading"><div><p className="sales-eyebrow">Online checkout</p><h2 id="sales-orders-heading">Customer orders</h2></div><span className="sales-history-refresh">Live updates every 10 seconds</span></div>
+      {dashboard?.onlineOrders.length ? <div className="sales-orders-grid">{dashboard.onlineOrders.map((order) => <OnlineOrderCard key={order.id} order={order} />)}</div>
+        : <div className="sales-orders-empty">{loading ? "Loading customer orders…" : "No customer orders yet. Newly paid online orders will appear here."}</div>}
+    </section>
 
     <section className={`sales-workspace${readOnly ? " sales-workspace-readonly" : ""}`} aria-label="Point of sale">
       <div className="sales-products-panel">

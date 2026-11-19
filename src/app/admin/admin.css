@@ -221,11 +221,13 @@
 .admin-password-target select { width:100%; min-height:48px; padding:0 13px; border:1px solid #dfd6e5; border-radius:8px; outline:none; background:rgba(255,255,255,.92); color:var(--atelier-ink); font:inherit; font-size:13px; cursor:pointer; transition:border-color .18s ease,box-shadow .18s ease; }
 .admin-password-target select:focus { border-color:#927bad; box-shadow:0 0 0 3px rgba(118,87,141,.14); }
 .admin-sales-credential-fields input { padding-right:13px; }
+.admin-sales-credential-fields .admin-password-input input { padding-right:44px; }
 .admin-password-input { position:relative; display:block; }
 .admin-password-visibility { position:absolute; top:0; right:0; width:42px; height:48px; display:grid; place-items:center; padding:0; border:0; border-radius:0 8px 8px 0; background:transparent; color:#7a6c82; cursor:pointer; }
 .admin-password-visibility:hover { background:#f6f1f8; color:#614578; }
+.admin-password-visibility:disabled { cursor:wait; }
 .admin-password-visibility:focus-visible { outline:2px solid #76578d; outline-offset:-3px; }
-.admin-password-visibility svg { width:19px; height:19px; }
+.admin-password-visibility svg { width:19px; height:19px; transform:translateY(6px); }
 .admin-password-fields input:focus { border-color:#927bad; box-shadow:0 0 0 3px rgba(118,87,141,.14); }
 .admin-password-feedback { margin:16px 0 0; padding:11px 13px; border-radius:8px; font-size:12px; line-height:1.5; }
 .admin-password-feedback.error { border:1px solid #edcfcd; background:#fff5f4; color:#8f4039; }
