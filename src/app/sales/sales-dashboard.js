@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import BrandWordmark from "../components/brand-wordmark";
+import { getPriceForProductSize, getProductSizePrices } from "../../lib/products";
 
 const money = new Intl.NumberFormat("en-GH", { style: "currency", currency: "GHS", minimumFractionDigits: 2 });
 const quantityFormatter = new Intl.NumberFormat("en-GH");
@@ -17,6 +18,10 @@ const orderStatusLabels = {
   cancelled: "Cancelled",
 };
 const DASHBOARD_REFRESH_INTERVAL_MS = 10_000;
+
+function salesLineKey(item) {
+  return JSON.stringify([item.id, item.size || ""]);
+}
 
 async function readApiResponse(response) {
   const body = await response.json().catch(() => ({}));
@@ -95,8 +100,6 @@ function SaleReceipt({ sale, onClose, onPrint }) {
     <SaleReceiptCopy sale={sale} headingId="sales-receipt-heading" />
     <div className="sales-receipt-print-sheet" aria-hidden="true">
       <article className="sales-receipt-print-copy"><SaleReceiptCopy sale={sale} /></article>
-      <div className="sales-receipt-perforation"><span>Cut here</span></div>
-      <article className="sales-receipt-print-copy"><SaleReceiptCopy sale={sale} /></article>
     </div>
     <div className="sales-receipt-actions">
       <button type="button" className="sales-receipt-print" onClick={onPrint}>Print receipt</button>
@@ -113,6 +116,7 @@ export default function SalesDashboard({ username, showAdminReturn = false, read
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("All");
   const [cart, setCart] = useState([]);
+  const [selectedSizes, setSelectedSizes] = useState({});
   const [paymentMethod, setPaymentMethod] = useState("cash");
   const [savingSale, setSavingSale] = useState(false);
   const [saleError, setSaleError] = useState("");
@@ -123,11 +127,20 @@ export default function SalesDashboard({ username, showAdminReturn = false, read
     try {
       const data = await readApiResponse(await fetch(readOnly ? "/api/admin/sales" : "/api/sales", { cache: "no-store" }));
       setDashboard(data);
-      setCart((current) => current.flatMap((item) => {
-        const latestProduct = data.products.find((product) => product.id === item.id);
-        if (!latestProduct || latestProduct.stockQuantity < 1) return [];
-        return [{ ...latestProduct, quantity: Math.min(item.quantity, latestProduct.stockQuantity) }];
-      }));
+      setCart((current) => {
+        const remainingStock = new Map(data.products.map((product) => [product.id, product.stockQuantity]));
+        return current.flatMap((item) => {
+          const latestProduct = data.products.find((product) => product.id === item.id);
+          if (!latestProduct) return [];
+          const size = item.size || latestProduct.size;
+          const price = getPriceForProductSize(latestProduct, size);
+          const available = remainingStock.get(item.id);
+          const quantity = Math.min(item.quantity, Math.max(available, 0));
+          if (price === null || quantity < 1) return [];
+          remainingStock.set(item.id, available - quantity);
+          return [{ ...latestProduct, size, price, quantity }];
+        });
+      });
       setLoadError("");
     } catch (error) {
       setLoadError(error.message || "Could not load the sales desk.");
@@ -163,27 +176,34 @@ export default function SalesDashboard({ username, showAdminReturn = false, read
   const cartTotal = cart.reduce((total, item) => total + Math.round(item.price * 100) * item.quantity, 0) / 100;
   const cartUnits = cart.reduce((total, item) => total + item.quantity, 0);
 
-  function addToCart(product) {
+  function addToCart(product, size) {
     setSaleError("");
     setSaleNotice("");
-    const existing = cart.find((item) => item.id === product.id);
-    if (existing && existing.quantity >= product.stockQuantity) {
+    const price = getPriceForProductSize(product, size);
+    if (price === null) {
+      setSaleError("That size is no longer available. Refresh inventory and try again.");
+      return;
+    }
+    const productQuantity = cart.filter((item) => item.id === product.id).reduce((total, item) => total + item.quantity, 0);
+    if (productQuantity >= product.stockQuantity) {
       setSaleError(`Only ${product.stockQuantity} ${product.stockQuantity === 1 ? "unit is" : "units are"} available for ${product.name}.`);
       return;
     }
     setCart((current) => {
-      if (current.some((item) => item.id === product.id)) return current.map((item) => item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item);
-      return [...current, { ...product, quantity: 1 }];
+      if (current.some((item) => item.id === product.id && item.size === size)) return current.map((item) => item.id === product.id && item.size === size ? { ...item, quantity: item.quantity + 1 } : item);
+      return [...current, { ...product, size, price, quantity: 1 }];
     });
   }
 
-  function changeQuantity(productId, delta) {
+  function changeQuantity(productId, size, delta) {
     setCart((current) => current.flatMap((item) => {
-      if (item.id !== productId) return [item];
+      if (item.id !== productId || item.size !== size) return [item];
       const quantity = item.quantity + delta;
       if (quantity < 1) return [];
       const available = dashboard?.products.find((product) => product.id === productId)?.stockQuantity ?? item.stockQuantity;
       if (available < 1) return [];
+      const quantityInCart = current.filter((line) => line.id === productId).reduce((total, line) => total + line.quantity, 0);
+      if (delta > 0 && quantityInCart >= available) return [item];
       return [{ ...item, quantity: Math.max(1, Math.min(quantity, available)) }];
     }));
   }
@@ -200,7 +220,7 @@ export default function SalesDashboard({ username, showAdminReturn = false, read
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           paymentMethod,
-          items: cart.map((item) => ({ productId: item.id, quantity: item.quantity })),
+          items: cart.map((item) => ({ productId: item.id, size: item.size, quantity: item.quantity })),
         }),
       }));
       setCart([]);
@@ -258,10 +278,16 @@ export default function SalesDashboard({ username, showAdminReturn = false, read
           : dashboard?.products.length === 0 ? <div className="sales-empty-state"><strong>No products in the catalogue</strong><span>Products added by the admin will appear here.</span></div>
             : visibleProducts.length === 0 ? <div className="sales-empty-state"><strong>No matching products</strong><span>Try a different search or category.</span></div>
               : <div className="sales-product-grid">{visibleProducts.map((product) => {
-                const inCart = cart.find((item) => item.id === product.id)?.quantity || 0;
+                const inCart = cart.filter((item) => item.id === product.id).reduce((total, item) => total + item.quantity, 0);
+                const sizeOptions = getProductSizePrices(product);
+                const selectedSize = selectedSizes[product.id] || sizeOptions[0]?.size || product.size;
+                const selectedPrice = getPriceForProductSize(product, selectedSize);
+                const displayedPrice = readOnly && sizeOptions.length > 1
+                  ? `From ${money.format(Math.min(...sizeOptions.map((option) => Number(option.price))))}`
+                  : money.format(selectedPrice ?? product.price);
                 return <article className={`sales-product-card${product.stockQuantity === 0 ? " is-sold-out" : ""}`} key={product.id}>
                   <div className="sales-product-image" style={{ backgroundImage: product.image ? `url("${product.image}")` : undefined }}><span className={product.stockQuantity <= 5 ? "sales-stock-pill sales-stock-pill-low" : "sales-stock-pill"}>{product.stockQuantity === 0 ? "Sold out" : `${product.stockQuantity} in stock`}</span></div>
-                  <div className="sales-product-info"><span>{product.category} · {product.size}</span><h3>{product.name}</h3><div><strong>{money.format(product.price)}</strong>{!readOnly && <button type="button" onClick={() => addToCart(product)} disabled={product.stockQuantity === 0 || inCart >= product.stockQuantity} aria-label={`Add ${product.name} to sale`}>{inCart ? `Added · ${inCart}` : "Add to sale"}<span aria-hidden="true">+</span></button>}</div></div>
+                  <div className="sales-product-info"><span>{product.category}</span><h3>{product.name}</h3>{!readOnly && <label className="sales-size-choice">Size<select value={selectedSize} onChange={(event) => setSelectedSizes((current) => ({ ...current, [product.id]: event.target.value }))}>{sizeOptions.map((option) => <option key={option.size} value={option.size}>{option.size}</option>)}</select></label>}<div><strong>{displayedPrice}</strong>{!readOnly && <button type="button" onClick={() => addToCart(product, selectedSize)} disabled={product.stockQuantity === 0 || inCart >= product.stockQuantity} aria-label={`Add ${product.name}, size ${selectedSize}, to sale`}>{inCart ? `Added · ${inCart}` : "Add to sale"}<span aria-hidden="true">+</span></button>}</div></div>
                 </article>;
               })}</div>}
       </div>
@@ -269,7 +295,7 @@ export default function SalesDashboard({ username, showAdminReturn = false, read
       {!readOnly && <aside className="sales-checkout-panel" aria-labelledby="sales-checkout-heading">
         <div className="sales-section-heading"><div><p className="sales-eyebrow">Current transaction</p><h2 id="sales-checkout-heading">Sale summary</h2></div><span className="sales-cart-count">{cartUnits} {cartUnits === 1 ? "item" : "items"}</span></div>
         {cart.length === 0 ? <div className="sales-cart-empty"><span aria-hidden="true">＋</span><strong>Your sale is empty</strong><small>Add products from the collection to begin.</small></div>
-          : <ul className="sales-cart-list">{cart.map((item) => <li key={item.id}><div className="sales-cart-item-name"><strong>{item.name}</strong><small>{money.format(item.price)} each</small></div><div className="sales-quantity-control"><button type="button" onClick={() => changeQuantity(item.id, -1)} aria-label={`Remove one ${item.name}`}>−</button><span>{item.quantity}</span><button type="button" onClick={() => changeQuantity(item.id, 1)} disabled={item.quantity >= (dashboard?.products.find((product) => product.id === item.id)?.stockQuantity ?? item.stockQuantity)} aria-label={`Add one ${item.name}`}>+</button></div><strong className="sales-line-total">{money.format(item.price * item.quantity)}</strong></li>)}</ul>}
+          : <ul className="sales-cart-list">{cart.map((item) => <li key={salesLineKey(item)}><div className="sales-cart-item-name"><strong>{item.name}</strong><small>{item.size} · {money.format(item.price)} each</small></div><div className="sales-quantity-control"><button type="button" onClick={() => changeQuantity(item.id, item.size, -1)} aria-label={`Remove one ${item.name}, size ${item.size}`}>−</button><span>{item.quantity}</span><button type="button" onClick={() => changeQuantity(item.id, item.size, 1)} disabled={cart.filter((line) => line.id === item.id).reduce((total, line) => total + line.quantity, 0) >= (dashboard?.products.find((product) => product.id === item.id)?.stockQuantity ?? item.stockQuantity)} aria-label={`Add one ${item.name}, size ${item.size}`}>+</button></div><strong className="sales-line-total">{money.format(item.price * item.quantity)}</strong></li>)}</ul>}
         <div className="sales-checkout-footer">
           <label htmlFor="sales-payment-method">Payment received by</label>
           <select id="sales-payment-method" value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value)}><option value="cash">Cash</option><option value="mobile_money">Mobile Money</option><option value="card">Card</option></select>

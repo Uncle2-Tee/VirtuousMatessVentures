@@ -7,6 +7,7 @@ export function productToDatabaseRow(product) {
     category: product.category,
     price: product.price,
     size: product.size,
+    sizePrices: product.sizePrices ?? null,
     stockQuantity: product.stockQuantity ?? 0,
     image: product.image,
     description: product.description,
@@ -29,6 +30,9 @@ export function productFromDatabaseRow(row) {
     category: row.category,
     price: Number(row.price),
     size: row.size,
+    sizePrices: Array.isArray(row.sizePrices)
+      ? row.sizePrices.map((option) => ({ size: option.size, price: Number(option.price) }))
+      : [],
     stockQuantity: row.stockQuantity,
     image: row.image,
     description: row.description,
@@ -42,6 +46,35 @@ export function productFromDatabaseRow(row) {
     ...(row.discountLabel == null ? {} : { discountLabel: row.discountLabel }),
     ...(row.rating == null ? {} : { rating: Number(row.rating) }),
   };
+}
+
+export function getProductSizePrices(product) {
+  if (Array.isArray(product?.sizePrices) && product.sizePrices.length > 0) {
+    return product.sizePrices;
+  }
+  return typeof product?.size === "string"
+    ? [{ size: product.size, price: Number(product.price) }]
+    : [];
+}
+
+export function getPriceForProductSize(product, size) {
+  const option = getProductSizePrices(product).find((item) => item.size === size);
+  return option ? Number(option.price) : null;
+}
+
+function validSizePrices(sizePrices) {
+  return Array.isArray(sizePrices)
+    && sizePrices.length > 0
+    && sizePrices.length <= 100
+    && sizePrices.every((option) => option
+      && typeof option.size === "string"
+      && option.size.trim().length > 0
+      && option.size.trim().length <= 100
+      && Number.isFinite(Number(option.price))
+      && Number(option.price) > 0
+      && Math.abs(Number(option.price) * 100 - Math.round(Number(option.price) * 100)) < 1e-8
+      && Number(option.price) <= MAX_PRODUCT_PRICE)
+    && new Set(sizePrices.map((option) => option.size.trim().toLowerCase())).size === sizePrices.length;
 }
 
 export function validProduct(product) {
@@ -62,6 +95,7 @@ export function validProduct(product) {
     && Number.isSafeInteger(product.stockQuantity)
     && product.stockQuantity >= 0
     && product.stockQuantity <= 2_147_483_647
+    && (product.sizePrices === undefined || validSizePrices(product.sizePrices))
     && typeof product.size === "string"
     && typeof product.image === "string"
     && typeof product.description === "string",

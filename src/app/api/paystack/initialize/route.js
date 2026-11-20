@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { getAuthenticatedUser } from "../../../../lib/customer-auth";
 import { failPaymentAttemptAndReleaseStock, InsufficientStockError, reserveProductStock } from "../../../../lib/inventory";
 import { prisma } from "../../../../lib/prisma";
+import { getPriceForProductSize } from "../../../../lib/products";
 import { DELIVERY_FEE } from "../../../../lib/pricing";
 import { getPaystackCallbackUrl, getPaystackSecretKey, initializePaystackTransaction } from "../../../../lib/paystack";
 import { processExpiredInventoryReservations } from "../../../../lib/paystack-payments";
@@ -21,8 +22,10 @@ export async function POST(request) {
   }
   const { items, customerName, customerEmail, phone, shippingAddress, city } = body || {};
   if (!Array.isArray(items) || items.length < 1 || items.length > 20
-    || items.some((item) => !item || typeof item.productId !== "string" || !item.productId.trim() || !Number.isInteger(item.quantity) || item.quantity < 1 || item.quantity > 20)
-    || new Set(items.map((item) => item.productId)).size !== items.length
+    || items.some((item) => !item || typeof item.productId !== "string" || !item.productId.trim()
+      || (item.size !== undefined && (typeof item.size !== "string" || !item.size.trim() || item.size.length > 100))
+      || !Number.isInteger(item.quantity) || item.quantity < 1 || item.quantity > 20)
+    || new Set(items.map((item) => JSON.stringify([item.productId, item.size || ""]))).size !== items.length
     || typeof customerName !== "string" || customerName.trim().length < 2 || customerName.trim().length > 120
     || typeof customerEmail !== "string" || customerEmail.trim().length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customerEmail.trim())
     || typeof phone !== "string" || phone.trim().length < 7 || phone.trim().length > 30
@@ -42,21 +45,30 @@ export async function POST(request) {
     const productIds = [...new Set(items.map((item) => item.productId))];
     const products = await prisma.product.findMany({
       where: { id: { in: productIds } },
-      select: { id: true, name: true, price: true, image: true, size: true, category: true, stockQuantity: true },
+      select: { id: true, name: true, price: true, image: true, size: true, sizePrices: true, category: true, stockQuantity: true },
     });
     const productsById = new Map(products.map((product) => [product.id, product]));
     if (productIds.some((id) => !productsById.has(id))) {
       return NextResponse.json({ error: "One or more cart products are no longer available. Refresh your cart and try again." }, { status: 409 });
     }
 
-    const orderItems = items.map(({ productId, quantity }) => {
+    const resolvedItems = items.map(({ productId, size, quantity }) => {
       const product = productsById.get(productId);
-      const price = Number(product.price);
+      const selectedSize = size || product.size;
+      const price = getPriceForProductSize(product, selectedSize);
+      return { product, size: selectedSize, price, quantity };
+    });
+    if (resolvedItems.some((item) => item.price === null)
+      || new Set(resolvedItems.map((item) => JSON.stringify([item.product.id, item.size]))).size !== resolvedItems.length) {
+      return NextResponse.json({ error: "One or more selected sizes are no longer available. Refresh your cart and try again." }, { status: 409 });
+    }
+
+    const orderItems = resolvedItems.map(({ product, size, price, quantity }) => {
       return {
         product_id: product.id,
         name: product.name,
         category: product.category,
-        size: product.size,
+        size,
         image: product.image,
         price,
         quantity,

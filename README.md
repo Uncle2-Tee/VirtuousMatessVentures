@@ -45,6 +45,8 @@ The seed command removes the six retired skincare demo products by their origina
 
 After applying the schema, admins can change their password from the dashboard. The new password is scrypt-hashed in the `admin_credentials` table; `ADMIN_PASSWORD` remains the bootstrap password until the first change. Changing it signs out other admin sessions while keeping the current session active. For password recovery, delete the `admin` row from `public.admin_credentials` in a trusted database console; the configured `ADMIN_PASSWORD` can then be used to sign in again.
 
+When publishing a product, add a size and its price for each available option. Customers and sales staff select a size to see its exact price, and checkout revalidates that selection against the catalogue. The stock quantity entered for a product applies across all of its sizes.
+
 On Vercel or another serverless host, add these variables in the project’s production environment settings. Vercel is configured to run `npm run build`, which synchronizes the Prisma schema and RLS settings before generating Prisma Client when `DATABASE_URL` is configured. Make sure both database URLs point to the intended production database. The admin username and password never reach the browser as configuration values. A successful sign-in creates an HMAC-signed, HTTP-only, SameSite-Strict session cookie containing the signed-in username; it expires after eight hours, and production cookies are HTTPS-only.
 
 ## Sales desk
@@ -58,6 +60,8 @@ npx prisma db push
 npx prisma db execute --schema prisma/schema.prisma --file prisma/enable-rls.sql
 npx prisma generate
 ```
+
+Counter receipts print as one compact 80 mm receipt with content-driven height. Select continuous receipt-roll paper in the printer settings for a clean cut at the end of the printed content.
 
 The sales dashboard and sign-in route are excluded from search indexing. Sales access is protected by a separate HTTP-only, SameSite-Strict, eight-hour session cookie. The configured sales password is server-only and is never sent to the browser.
 

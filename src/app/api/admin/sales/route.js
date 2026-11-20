@@ -27,7 +27,7 @@ export async function GET() {
       prisma.salesTransaction.findMany({ orderBy: { createdAt: "desc" } }),
       prisma.product.findMany({
         orderBy: [{ category: "asc" }, { name: "asc" }],
-        select: { id: true, name: true, category: true, size: true, price: true, stockQuantity: true, image: true },
+        select: { id: true, name: true, category: true, size: true, sizePrices: true, price: true, stockQuantity: true, image: true },
       }),
       prisma.order.findMany({
         where: { status: { not: "awaiting_payment" } },

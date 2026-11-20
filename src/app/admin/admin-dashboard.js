@@ -14,7 +14,7 @@ import { MAX_PRODUCT_PRICE } from "../../lib/products";
 import BrandWordmark from "../components/brand-wordmark";
 
 const money = new Intl.NumberFormat("en-GH", { style: "currency", currency: "GHS", minimumFractionDigits: 2 });
-const emptyForm = { name: "", category: "Dresses", price: "", size: "", stockQuantity: "", image: "", description: "", howToUse: defaultProductUsage, caution: defaultProductCaution };
+const emptyForm = { name: "", category: "Dresses", sizePrices: [{ size: "", price: "" }], stockQuantity: "", image: "", description: "", howToUse: defaultProductUsage, caution: defaultProductCaution };
 const LOW_STOCK_THRESHOLD = 5;
 const DASHBOARD_REFRESH_INTERVAL_MS = 10_000;
 
@@ -193,13 +193,28 @@ export default function AdminDashboard({ username }) {
     if (uploadingImage) return;
     if (!databaseReady) return;
     if (!form.image) { setMessage("Upload a product image."); return; }
-    const price = Number(form.price);
-    if (!Number.isFinite(price) || price <= 0 || price > MAX_PRODUCT_PRICE) {
-      setMessage(`Enter a price between GHS 0.01 and GHS ${MAX_PRODUCT_PRICE.toLocaleString("en-GH", { minimumFractionDigits: 2 })}.`);
+    const sizePrices = form.sizePrices.map((option) => ({
+      size: option.size.trim(),
+      price: Number(option.price),
+    }));
+    if (sizePrices.some((option) => !option.size
+      || option.size.length > 100
+      || !Number.isFinite(option.price)
+      || option.price <= 0
+      || option.price > MAX_PRODUCT_PRICE)) {
+      setMessage(`Enter a size and a price between GHS 0.01 and GHS ${MAX_PRODUCT_PRICE.toLocaleString("en-GH", { minimumFractionDigits: 2 })} for every option.`);
+      return;
+    }
+    if (new Set(sizePrices.map((option) => option.size.toLowerCase())).size !== sizePrices.length) {
+      setMessage("Each size must be unique.");
+      return;
+    }
+    if (sizePrices.length > 100) {
+      setMessage("A product can have up to 100 size options.");
       return;
     }
     const description = form.description.trim() || "A thoughtfully selected piece for everyday style and living.";
-    const product = { id: crypto.randomUUID(), name: form.name.trim(), category: form.category, price, size: form.size.trim() || "One size", stockQuantity: Number(form.stockQuantity), image: form.image, description, cardDescription: description, howToUse: form.howToUse.trim() || defaultProductUsage, caution: form.caution.trim() || defaultProductCaution, badge: "Just added" };
+    const product = { id: crypto.randomUUID(), name: form.name.trim(), category: form.category, price: Math.min(...sizePrices.map((option) => option.price)), size: sizePrices.map((option) => option.size).join(", "), sizePrices, stockQuantity: Number(form.stockQuantity), image: form.image, description, cardDescription: description, howToUse: form.howToUse.trim() || defaultProductUsage, caution: form.caution.trim() || defaultProductCaution, badge: "Just added" };
     addingProductRef.current = true;
     setAddingProduct(true);
     try {
@@ -318,6 +333,7 @@ export default function AdminDashboard({ username }) {
 
   async function saveProduct(product) {
     const name = (nameDrafts[product.id] ?? product.name).trim();
+    const hasSizePrices = Array.isArray(product.sizePrices) && product.sizePrices.length > 1;
     const priceValue = priceDrafts[product.id] ?? String(product.price);
     const stockQuantityChanged = Object.hasOwn(stockDrafts, product.id);
     const stockValue = stockDrafts[product.id] ?? String(product.stockQuantity);
@@ -332,7 +348,7 @@ export default function AdminDashboard({ username }) {
       setMessage("Product names must be 200 characters or fewer.");
       return;
     }
-    if (priceValue.trim() === "" || !Number.isFinite(price) || price <= 0) {
+    if (!hasSizePrices && (priceValue.trim() === "" || !Number.isFinite(price) || price <= 0)) {
       setMessage("Enter a valid price greater than zero.");
       return;
     }
@@ -346,7 +362,7 @@ export default function AdminDashboard({ username }) {
       const { product: saved } = await readApiResponse(await fetch("/api/admin/products", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: product.id, name, price, ...(stockQuantityChanged ? { stockQuantity } : {}), ...(category !== product.category ? { category } : {}) }),
+        body: JSON.stringify({ id: product.id, name, ...(!hasSizePrices ? { price } : {}), ...(stockQuantityChanged ? { stockQuantity } : {}), ...(category !== product.category ? { category } : {}) }),
       }));
       setProducts((current) => current.map((item) => item.id === product.id ? saved : item));
       notifyProductCatalogUpdate();
@@ -542,8 +558,18 @@ export default function AdminDashboard({ username }) {
             <section className="listing-form-section" aria-labelledby="listing-details-heading">
               <div className="listing-section-heading"><span>01</span><h3 id="listing-details-heading">Product details</h3></div>
               <label>Product name<input required maxLength={200} value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="e.g. Sneakers" /></label>
-              <div className="field-row listing-field-row"><label>Category<select value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })}>{categories.map((category) => <option key={category}>{category}</option>)}</select></label><label>Price (GHS)<input required min="0.01" max={MAX_PRODUCT_PRICE} step="0.01" type="number" value={form.price} onChange={(event) => setForm({ ...form, price: event.target.value })} placeholder="36.00" /></label></div>
-              <div className="field-row listing-field-row"><label>Size<input value={form.size} onChange={(event) => setForm({ ...form, size: event.target.value })} placeholder={getProductSizePlaceholder(form.category)} /></label><label>Stock quantity<input required type="number" min="0" max="2147483647" step="1" value={form.stockQuantity} onChange={(event) => setForm({ ...form, stockQuantity: event.target.value })} placeholder="e.g. 25" /><small>Available units; pending payments reserve stock temporarily.</small></label></div>
+              <label>Category<select value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })}>{categories.map((category) => <option key={category}>{category}</option>)}</select></label>
+              <fieldset className="size-price-options">
+                <legend>Size &amp; price options</legend>
+                <p>Set a separate price for each size. Customers choose their size before adding the item to their cart.</p>
+                {form.sizePrices.map((option, index) => <div className="size-price-row" key={index}>
+                  <label htmlFor={`new-product-size-${index}`}>Size<input id={`new-product-size-${index}`} required maxLength={100} value={option.size} onChange={(event) => setForm((current) => ({ ...current, sizePrices: current.sizePrices.map((item, itemIndex) => itemIndex === index ? { ...item, size: event.target.value } : item) }))} placeholder={getProductSizePlaceholder(form.category)} /></label>
+                  <label htmlFor={`new-product-price-${index}`}>Price (GHS)<input id={`new-product-price-${index}`} required min="0.01" max={MAX_PRODUCT_PRICE} step="0.01" type="number" value={option.price} onChange={(event) => setForm((current) => ({ ...current, sizePrices: current.sizePrices.map((item, itemIndex) => itemIndex === index ? { ...item, price: event.target.value } : item) }))} placeholder="36.00" /></label>
+                  {form.sizePrices.length > 1 && <button className="size-price-remove" type="button" onClick={() => setForm((current) => ({ ...current, sizePrices: current.sizePrices.filter((_, itemIndex) => itemIndex !== index) }))} aria-label={`Remove size option ${option.size || index + 1}`}>Remove</button>}
+                </div>)}
+                <button className="size-price-add" type="button" onClick={() => setForm((current) => ({ ...current, sizePrices: [...current.sizePrices, { size: "", price: "" }] }))} disabled={form.sizePrices.length >= 100}>+ Add another size</button>
+              </fieldset>
+              <label>Stock quantity<input required type="number" min="0" max="2147483647" step="1" value={form.stockQuantity} onChange={(event) => setForm({ ...form, stockQuantity: event.target.value })} placeholder="e.g. 25" /><small>Available units across all sizes; pending payments reserve stock temporarily.</small></label>
               <div className="listing-image-field">
                 <span className="listing-field-label">Product image <span>Required</span></span>
                 <label className={`listing-image-upload${form.image ? " has-image" : ""}`}>
@@ -678,7 +704,9 @@ export default function AdminDashboard({ username }) {
             <div className="catalog-editors">
               <div className="catalog-category-editor"><label htmlFor={`category-${product.id}`}>Category</label><select id={`category-${product.id}`} aria-label={`Category for ${product.name}`} value={productCategoryDrafts[product.id] ?? product.category} onChange={(event) => setProductCategoryDrafts((current) => ({ ...current, [product.id]: event.target.value }))}>{categories.map((category) => <option key={category}>{category}</option>)}</select></div>
               <div className="catalog-name-editor"><label htmlFor={`name-${product.id}`}>Product name</label><div><input id={`name-${product.id}`} aria-label={`Name for ${product.name}`} maxLength={200} value={nameDrafts[product.id] ?? product.name} onChange={(event) => setNameDrafts((current) => ({ ...current, [product.id]: event.target.value }))} /></div></div>
-              <div className="catalog-price-editor"><label htmlFor={`price-${product.id}`}>Price (GHS)</label><div><input id={`price-${product.id}`} aria-label={`Price for ${product.name} in Ghana cedis`} type="number" min="0.01" step="0.01" required value={priceDrafts[product.id] ?? String(product.price)} onChange={(event) => setPriceDrafts((current) => ({ ...current, [product.id]: event.target.value }))} /></div></div>
+              {Array.isArray(product.sizePrices) && product.sizePrices.length > 1
+                ? <div className="catalog-size-prices"><span>Size prices</span>{product.sizePrices.map((option) => <small key={option.size}>{option.size} · {money.format(Number(option.price))}</small>)}</div>
+                : <div className="catalog-price-editor"><label htmlFor={`price-${product.id}`}>Price (GHS)</label><div><input id={`price-${product.id}`} aria-label={`Price for ${product.name} in Ghana cedis`} type="number" min="0.01" step="0.01" required value={priceDrafts[product.id] ?? String(product.price)} onChange={(event) => setPriceDrafts((current) => ({ ...current, [product.id]: event.target.value }))} /></div></div>}
               <div className="catalog-stock-editor"><label htmlFor={`stock-${product.id}`}>Stock quantity</label><input id={`stock-${product.id}`} aria-label={`Stock quantity for ${product.name}`} type="number" min="0" max="2147483647" step="1" required value={stockDrafts[product.id] ?? String(product.stockQuantity)} onChange={(event) => setStockDrafts((current) => ({ ...current, [product.id]: event.target.value }))} /></div>
               <button className="catalog-save-button" type="button" onClick={() => saveProduct(product)} disabled={Boolean(savingProductIds[product.id])}>{savingProductIds[product.id] ? "Saving…" : "Save changes"}</button>
             </div>

@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { InsufficientStockError, reserveProductStock } from "../../../lib/inventory";
 import { isTransientDatabaseError } from "../../../lib/database-retry";
 import { prisma } from "../../../lib/prisma";
+import { getPriceForProductSize } from "../../../lib/products";
 import { orderToSalesApi } from "../../../lib/sales-orders";
 import { SALES_SESSION_COOKIE, getSalesSessionUsername } from "../../../lib/sales-auth";
 
@@ -12,6 +13,7 @@ const paymentMethods = new Set(["cash", "mobile_money", "card"]);
 const MAX_SALE_TOTAL_CENTS = 9_999_999_999;
 
 class SaleAmountLimitError extends Error {}
+class InvalidProductSizeError extends Error {}
 
 function salesTransactionToApi(sale) {
   return {
@@ -44,7 +46,7 @@ export async function GET() {
     const [products, todaySales, recentSales, onlineOrders] = await Promise.all([
       prisma.product.findMany({
         orderBy: [{ category: "asc" }, { name: "asc" }],
-        select: { id: true, name: true, category: true, size: true, price: true, stockQuantity: true, image: true },
+        select: { id: true, name: true, category: true, size: true, sizePrices: true, price: true, stockQuantity: true, image: true },
       }),
       prisma.salesTransaction.aggregate({
         where: { createdAt: { gte: startOfDay } },
@@ -104,9 +106,11 @@ export async function POST(request) {
   if (!Array.isArray(items) || items.length < 1 || items.length > 50
     || items.some((item) => typeof item?.productId !== "string"
       || !item.productId
+      || (item.size !== undefined && (typeof item.size !== "string" || !item.size.trim() || item.size.length > 100))
       || !Number.isSafeInteger(item.quantity)
       || item.quantity < 1
       || item.quantity > 1000)
+    || new Set(items.map((item) => JSON.stringify([item.productId, item.size || ""]))).size !== items.length
     || !paymentMethods.has(paymentMethod)) {
     return NextResponse.json({ error: "Add valid products, quantities, and a payment method before recording the sale." }, { status: 400 });
   }
@@ -125,7 +129,7 @@ export async function POST(request) {
       const productIds = [...quantities.keys()].sort();
       const products = await database.product.findMany({
         where: { id: { in: productIds } },
-        select: { id: true, name: true, size: true, price: true },
+        select: { id: true, name: true, size: true, sizePrices: true, price: true },
       });
       if (products.length !== productIds.length) {
         throw new InsufficientStockError("A selected product", 0);
@@ -135,17 +139,21 @@ export async function POST(request) {
       await reserveProductStock(database, reservedItems);
 
       let totalCents = 0;
-      const saleItems = products.map((product) => {
-        const quantity = quantities.get(product.id);
-        const priceCents = Math.round(Number(product.price) * 100);
-        const lineTotalCents = priceCents * quantity;
+      const productsById = new Map(products.map((product) => [product.id, product]));
+      const saleItems = items.map((item) => {
+        const product = productsById.get(item.productId);
+        const size = item.size || product.size;
+        const price = getPriceForProductSize(product, size);
+        if (price === null) throw new InvalidProductSizeError("One or more selected sizes are no longer available.");
+        const priceCents = Math.round(price * 100);
+        const lineTotalCents = priceCents * item.quantity;
         totalCents += lineTotalCents;
         return {
           product_id: product.id,
           name: product.name,
-          size: product.size,
+          size,
           price: (priceCents / 100).toFixed(2),
-          quantity,
+          quantity: item.quantity,
           line_total: (lineTotalCents / 100).toFixed(2),
         };
       });
@@ -166,6 +174,9 @@ export async function POST(request) {
     return NextResponse.json({ sale: salesTransactionToApi(sale) }, { status: 201 });
   } catch (error) {
     if (error instanceof InsufficientStockError) {
+      return NextResponse.json({ error: error.message }, { status: 409 });
+    }
+    if (error instanceof InvalidProductSizeError) {
       return NextResponse.json({ error: error.message }, { status: 409 });
     }
     if (error instanceof SaleAmountLimitError) {

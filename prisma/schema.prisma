@@ -13,6 +13,7 @@ model Product {
   category        String
   price           Decimal  @db.Decimal(10, 2)
   size            String
+  sizePrices      Json?    @map("size_prices") @db.JsonB
   stockQuantity   Int      @default(0) @map("stock_quantity")
   image           String
   description     String

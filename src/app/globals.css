@@ -561,6 +561,9 @@ button,input,select,textarea { font:inherit; } button { cursor:pointer; touch-ac
   font-family:Arial,Helvetica,sans-serif;
   font-size:12px;
 }
+.product-size-choice { display:grid; max-width:280px; gap:8px; margin-top:20px; color:var(--muted); font-size:10px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; }
+.product-size-choice select { width:100%; min-height:46px; padding:0 12px; border:1px solid var(--line); border-radius:9px; background:#fff; color:var(--ink); font-size:13px; letter-spacing:0; text-transform:none; }
+.product-size-choice select:focus-visible { outline:2px solid var(--sage); outline-offset:2px; }
 .product-modal-wishlist {
   min-height:40px;
   padding:0 17px;

@@ -33,6 +33,7 @@ import { getCustomerSession } from "../lib/customer-auth-client";
 import { notifyProductCatalogUpdate, subscribeToProductCatalogUpdates } from "../lib/product-catalog-updates";
 import { publishCustomerSession, subscribeToCustomerSession } from "../lib/customer-session";
 import { whatsappHref } from "../lib/contact";
+import { getPriceForProductSize, getProductSizePrices } from "../lib/products";
 
 const guestCartStorageKey = "sabbybestcollection:guest-cart";
 const money = new Intl.NumberFormat("en-GH", { style: "currency", currency: "GHS", minimumFractionDigits: 2 });
@@ -47,6 +48,10 @@ const accountSections = [
   { id: "support", label: "Help & Support", icon: "help" },
 ];
 const iconComponents = { bag: ShoppingBagIcon, search: SearchIcon, shop: StorefrontOutlinedIcon, arrow: ArrowForwardIcon, close: CloseIcon, plus: AddIcon, minus: RemoveIcon, check: CheckIcon, shield: ShieldIcon, user: PersonIcon, home: HomeRoundedIcon, info: InfoOutlinedIcon, orders: ReceiptIcon, heart: FavoriteIcon, favorite: FavoriteRoundedIcon, star: StarIcon, location: LocationIcon, payment: CreditCardIcon, settings: SettingsIcon, help: HelpIcon, logout: LogoutIcon };
+
+function cartLineKey(item) {
+  return JSON.stringify([item.id, item.size || ""]);
+}
 
 function Icon({ name, size = 20 }) {
   const IconComponent = iconComponents[name] || HelpIcon;
@@ -86,7 +91,11 @@ async function verifyPaymentWithRetry(reference) {
 
 function ProductCard({ product, onAdd, onPreview, isWishlisted, onToggleWishlist }) {
   const outOfStock = Number.isInteger(product.stockQuantity) && product.stockQuantity <= 0;
-  return <article className="product-card"><div className="product-card-visual"><button className="product-image" onClick={() => onPreview(product)} aria-label={`View ${product.name}`}><span className="product-photo" style={{ backgroundImage: `url(${product.image})` }} />{product.badge && <span className="product-badge">{product.badge}</span>}<span className="quick-add">Quick view <Icon name="arrow" size={15} /></span></button><button className={`wishlist-toggle${isWishlisted ? " active" : ""}`} onClick={() => onToggleWishlist(product)} aria-label={isWishlisted ? `Remove ${product.name} from wishlist` : `Add ${product.name} to wishlist`} aria-pressed={isWishlisted}><Icon name={isWishlisted ? "favorite" : "heart"} size={19} /></button></div><div className="product-info"><div><p className="eyebrow product-card-meta"><span>{product.category}</span></p><h3>{product.name}</h3></div><p className="product-price">{money.format(product.price)}</p></div><button className="add-to-cart-button" onClick={() => onAdd(product)} disabled={outOfStock}>{outOfStock ? "Out of stock" : <>Add to cart <Icon name="plus" size={16} /></>}</button></article>;
+  const options = getProductSizePrices(product);
+  const prices = options.map((option) => Number(option.price));
+  const minPrice = Math.min(...prices);
+  const maxPrice = Math.max(...prices);
+  return <article className="product-card"><div className="product-card-visual"><button className="product-image" onClick={() => onPreview(product)} aria-label={`View ${product.name}`}><span className="product-photo" style={{ backgroundImage: `url(${product.image})` }} />{product.badge && <span className="product-badge">{product.badge}</span>}<span className="quick-add">Quick view <Icon name="arrow" size={15} /></span></button><button className={`wishlist-toggle${isWishlisted ? " active" : ""}`} onClick={() => onToggleWishlist(product)} aria-label={isWishlisted ? `Remove ${product.name} from wishlist` : `Add ${product.name} to wishlist`} aria-pressed={isWishlisted}><Icon name={isWishlisted ? "favorite" : "heart"} size={19} /></button></div><div className="product-info"><div><p className="eyebrow product-card-meta"><span>{product.category}</span></p><h3>{product.name}</h3></div><p className="product-price">{minPrice === maxPrice ? money.format(minPrice) : <>From {money.format(minPrice)}</>}</p></div><button className="add-to-cart-button" onClick={() => onAdd(product)} disabled={outOfStock}>{outOfStock ? "Out of stock" : <>{options.length > 1 ? "Choose size" : "Add to cart"} <Icon name={options.length > 1 ? "arrow" : "plus"} size={16} /></>}</button></article>;
 }
 
 function AccountEmptyState({ title, message, action, onAction }) {
@@ -116,6 +125,7 @@ export default function Home() {
   const [checkoutDetails, setCheckoutDetails] = useState({ customerName: null, customerEmail: "", phone: "", shippingAddress: "", city: "" });
   const [checkoutError, setCheckoutError] = useState("");
   const [orderSubmitting, setOrderSubmitting] = useState(false);
+  const [selectedProductSize, setSelectedProductSize] = useState("");
   const [paystackReady, setPaystackReady] = useState(false);
   const [paystackLoadFailed, setPaystackLoadFailed] = useState(false);
   const [toast, setToast] = useState("");
@@ -189,10 +199,10 @@ export default function Home() {
       })
       .then(({ cart: savedCart, wishlist: savedWishlist }) => {
         if (cancelled || !Array.isArray(savedCart) || !Array.isArray(savedWishlist)) return;
-        const mergedCart = new Map(cartRef.current.map((item) => [item.id, item]));
+        const mergedCart = new Map(cartRef.current.map((item) => [cartLineKey(item), item]));
         savedCart.forEach((item) => {
-          const current = mergedCart.get(item.id);
-          mergedCart.set(item.id, { ...current, ...item, quantity: Math.max(current?.quantity || 0, item.quantity) });
+          const current = mergedCart.get(cartLineKey(item));
+          mergedCart.set(cartLineKey(item), { ...current, ...item, quantity: Math.max(current?.quantity || 0, item.quantity) });
         });
         setCart([...mergedCart.values()]);
         setWishlist([...new Set([...wishlistRef.current, ...savedWishlist])]);
@@ -216,7 +226,7 @@ export default function Home() {
               "Content-Type": "application/json",
             },
             body: JSON.stringify({
-              cart: cart.map((item) => ({ productId: item.id, quantity: item.quantity })),
+              cart: cart.map((item) => ({ productId: item.id, size: item.size, quantity: item.quantity })),
               wishlist,
             }),
           });
@@ -253,9 +263,17 @@ export default function Home() {
         setAvailableCategories((current) => JSON.stringify(current) === JSON.stringify(body.categories) ? current : body.categories);
         const productsById = new Map(body.products.map((product) => [product.id, product]));
         setCart((current) => {
+          const remainingStock = new Map(body.products.map((product) => [product.id, product.stockQuantity]));
           const updated = current.flatMap((item) => {
             const product = productsById.get(item.id);
-            return product ? [{ ...item, ...product, quantity: item.quantity }] : [];
+            if (!product) return [];
+            const size = item.size || product.size;
+            const price = getPriceForProductSize(product, size);
+            const available = remainingStock.get(item.id);
+            const quantity = Number.isInteger(available) ? Math.min(item.quantity, Math.max(available, 0), 20) : item.quantity;
+            if (price === null || quantity < 1) return [];
+            if (Number.isInteger(available)) remainingStock.set(item.id, available - quantity);
+            return [{ ...item, ...product, size, price, quantity }];
           });
           return JSON.stringify(current) === JSON.stringify(updated) ? current : updated;
         });
@@ -383,11 +401,25 @@ export default function Home() {
   const wishlistProducts = products.filter((product) => wishlist.includes(product.id));
   const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const shipping = DELIVERY_FEE;
-  const addToCart = (product) => {
+  const openProductDetail = (product) => {
+    setSelectedProductSize(getProductSizePrices(product)[0]?.size || product.size);
+    setProductDetail(product);
+  };
+  const addToCart = (product, requestedSize) => {
+    if (getProductSizePrices(product).length > 1 && !requestedSize) {
+      openProductDetail(product);
+      return;
+    }
+    const size = requestedSize || getProductSizePrices(product)[0]?.size || product.size;
+    const price = getPriceForProductSize(product, size);
+    if (price === null) {
+      setToast("That size is no longer available. Refresh the product and try again.");
+      return;
+    }
     const stockLimited = Number.isInteger(product.stockQuantity);
-    const existing = cart.find((item) => item.id === product.id);
+    const productQuantityInCart = cart.filter((item) => item.id === product.id).reduce((total, item) => total + item.quantity, 0);
     const availableQuantity = stockLimited ? Math.min(product.stockQuantity, 20) : 20;
-    if (availableQuantity <= 0 || (existing?.quantity ?? 0) >= availableQuantity) {
+    if (availableQuantity <= 0 || productQuantityInCart >= availableQuantity) {
       setToast(availableQuantity <= 0
         ? `${product.name} is out of stock.`
         : availableQuantity === 20 && (!stockLimited || product.stockQuantity > 20)
@@ -396,10 +428,10 @@ export default function Home() {
       return;
     }
     setCart((current) => {
-      const found = current.find((item) => item.id === product.id);
-      return found ? current.map((item) => item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item) : [...current, { ...product, quantity: 1 }];
+      const found = current.find((item) => item.id === product.id && item.size === size);
+      return found ? current.map((item) => item.id === product.id && item.size === size ? { ...item, quantity: item.quantity + 1 } : item) : [...current, { ...product, size, price, quantity: 1 }];
     });
-    setToast(`${product.name} added to your cart`);
+    setToast(`${product.name} · ${size} added to your cart`);
   };
   const toggleWishlist = (product) => {
     const isWishlisted = wishlist.includes(product.id);
@@ -410,17 +442,18 @@ export default function Home() {
     setWishlist((current) => current.filter((id) => id !== product.id));
     setToast(`${product.name} removed from your wishlist`);
   };
-  const updateQuantity = (id, delta) => {
-    const item = cart.find((cartItem) => cartItem.id === id);
+  const updateQuantity = (id, size, delta) => {
+    const item = cart.find((cartItem) => cartItem.id === id && cartItem.size === size);
+    const productQuantityInCart = cart.filter((cartItem) => cartItem.id === id).reduce((total, cartItem) => total + cartItem.quantity, 0);
     const availableQuantity = Number.isInteger(item?.stockQuantity) ? Math.min(item.stockQuantity, 20) : 20;
-    if (delta > 0 && item && item.quantity >= availableQuantity) {
+    if (delta > 0 && item && productQuantityInCart >= availableQuantity) {
       setToast(availableQuantity === 20 && (!Number.isInteger(item.stockQuantity) || item.stockQuantity > 20)
         ? "You can add up to 20 of each product."
         : "This product has reached the available quantity.");
       return;
     }
     setCart((current) => current.reduce((next, cartItem) => {
-      if (cartItem.id !== id) return [...next, cartItem];
+      if (cartItem.id !== id || cartItem.size !== size) return [...next, cartItem];
       const quantity = cartItem.quantity + delta;
       return quantity > 0 ? [...next, { ...cartItem, quantity }] : next;
     }, []));
@@ -480,7 +513,7 @@ export default function Home() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          items: cart.map((item) => ({ productId: item.id, quantity: item.quantity })),
+          items: cart.map((item) => ({ productId: item.id, size: item.size, quantity: item.quantity })),
           customerName: checkoutDetails.customerName ?? customerSession?.user?.user_metadata?.full_name ?? "",
           customerEmail: checkoutDetails.customerEmail || customerSession?.user?.email || "",
           phone: checkoutDetails.phone,
@@ -625,7 +658,7 @@ export default function Home() {
           <span>{filteredProducts.length} {filteredProducts.length === 1 ? "product" : "products"}</span>
           {activeView === "categories" && activeCategory !== "All" && <span>in {activeCategory}</span>}
         </div>
-        {filteredProducts.length ? <div className="product-grid">{filteredProducts.map((product) => <ProductCard key={product.id} product={product} onAdd={addToCart} onPreview={setProductDetail} isWishlisted={wishlist.includes(product.id)} onToggleWishlist={toggleWishlist} />)}</div> : <div className="empty-state"><p>No products found for that search.</p><button className="text-button" onClick={() => { setSearch(""); setActiveCategory("All"); }}>View all products <Icon name="arrow" size={16} /></button></div>}
+        {filteredProducts.length ? <div className="product-grid">{filteredProducts.map((product) => <ProductCard key={product.id} product={product} onAdd={addToCart} onPreview={openProductDetail} isWishlisted={wishlist.includes(product.id)} onToggleWishlist={toggleWishlist} />)}</div> : <div className="empty-state"><p>No products found for that search.</p><button className="text-button" onClick={() => { setSearch(""); setActiveCategory("All"); }}>View all products <Icon name="arrow" size={16} /></button></div>}
       </section>
       {activeView !== "categories" && <section className="newsletter"><p className="eyebrow">A note from Virtuous Matess Ventures</p><h2>Good things, in your inbox.</h2><form onSubmit={(event) => { event.preventDefault(); setToast("Welcome to the Virtuous Matess Ventures list."); event.currentTarget.reset(); }}><input type="email" required placeholder="Your email address" aria-label="Your email address" /><button aria-label="Subscribe"><Icon name="arrow" /></button></form><small>By subscribing, you agree to receive marketing emails. Unsubscribe anytime.</small></section>}
       {activeView === "about" && <section className="about-page">
@@ -671,8 +704,8 @@ export default function Home() {
     {activeView === "account" && customerSession && mobileAccountSectionOpen && <button className="account-mobile-back" onClick={() => setMobileAccountSectionOpen(false)}>← Back to account sections</button>}
     <footer className="landing-footer"><p>© 2026 Virtuous Matess Ventures</p><p>Made with intention</p></footer>
     {toast && <div className="toast"><span><Icon name="check" size={17} /></span>{toast}</div>}
-    {isCartOpen && <><button className="modal-backdrop" onClick={() => setCartOpen(false)} aria-label="Close cart" /><aside className="cart-drawer" aria-modal="true" role="dialog" aria-label="Your shopping cart"><div className="drawer-header"><h2>Your cart <span>({cartCount})</span></h2><button className="icon-button" onClick={() => setCartOpen(false)} aria-label="Close cart"><Icon name="close" /></button></div>{cart.length ? <><div className="cart-items">{cart.map((item) => <div className="cart-item" key={item.id}><span className="cart-image" style={{ backgroundImage: `url(${item.image})` }} /><div><p className="eyebrow">{item.category}</p><h3>{item.name}</h3><p>{money.format(item.price)}</p><div className="quantity"><button onClick={() => updateQuantity(item.id, -1)} aria-label={`Decrease ${item.name}`}><Icon name="minus" size={14} /></button><span>{item.quantity}</span><button onClick={() => updateQuantity(item.id, 1)} aria-label={`Increase ${item.name}`} disabled={Number.isInteger(item.stockQuantity) && item.quantity >= item.stockQuantity}><Icon name="plus" size={14} /></button></div></div><button className="remove-button" onClick={() => updateQuantity(item.id, -item.quantity)}>Remove</button></div>)}</div><div className="cart-summary"><p><span>Subtotal</span><b>{money.format(subtotal)}</b></p><p className="total"><span>Total</span><b>{money.format(subtotal + shipping)}</b></p><button className="primary-button wide" onClick={openCheckout}>Secure checkout <Icon name="arrow" size={18} /></button><small><Icon name="shield" size={14} /> Delivery details first · sign in required before payment</small></div></> : <div className="cart-empty"><div className="empty-bag"><Icon name="bag" size={28} /></div><h3>Your cart is waiting.</h3><p>Add an essential to begin your ritual.</p><button className="primary-button" onClick={() => { setCartOpen(false); navigateTo("shop"); }}>Shop collection <Icon name="arrow" size={18} /></button></div>}</aside></>}
-    {productDetail && <><button className="modal-backdrop" onClick={() => setProductDetail(null)} aria-label="Close product details" /><div className="product-modal" role="dialog" aria-modal="true" aria-label={productDetail.name}><button className="icon-button close-modal" onClick={() => setProductDetail(null)} aria-label="Close product details"><Icon name="close" /></button><div className="modal-product-image" style={{ backgroundImage: `url(${productDetail.image})` }} /><div className="modal-product-panel"><div className="modal-product-copy"><p className="eyebrow">{productDetail.category}</p><h2>{productDetail.name}</h2><p className="modal-price">{money.format(productDetail.price)} <span>· {productDetail.size}</span></p><button className="account-text-action product-modal-wishlist" onClick={() => toggleWishlist(productDetail)}><Icon name={wishlist.includes(productDetail.id) ? "favorite" : "heart"} size={17} /> {wishlist.includes(productDetail.id) ? "Saved to wishlist" : "Save to wishlist"}</button><section className="product-guide" aria-label="Product guide"><h3>Product Guide</h3><details open><summary>Product Description</summary><p>{productDetail.description || "Product information is not available yet."}</p></details></section></div><div className="modal-product-actions"><button className="primary-button wide" onClick={() => { addToCart(productDetail); setProductDetail(null); setCartOpen(true); }} disabled={Number.isInteger(productDetail.stockQuantity) && productDetail.stockQuantity <= 0}>{Number.isInteger(productDetail.stockQuantity) && productDetail.stockQuantity <= 0 ? "Out of stock" : <>Add to cart <Icon name="bag" size={18} /></>}</button><p className="detail-note"><Icon name="shield" size={17} /> Thoughtfully formulated. Always cruelty-free.</p></div></div></div></>}
+    {isCartOpen && <><button className="modal-backdrop" onClick={() => setCartOpen(false)} aria-label="Close cart" /><aside className="cart-drawer" aria-modal="true" role="dialog" aria-label="Your shopping cart"><div className="drawer-header"><h2>Your cart <span>({cartCount})</span></h2><button className="icon-button" onClick={() => setCartOpen(false)} aria-label="Close cart"><Icon name="close" /></button></div>{cart.length ? <><div className="cart-items">{cart.map((item) => <div className="cart-item" key={cartLineKey(item)}><span className="cart-image" style={{ backgroundImage: `url(${item.image})` }} /><div><p className="eyebrow">{item.category}</p><h3>{item.name}</h3><p>{item.size} · {money.format(item.price)}</p><div className="quantity"><button onClick={() => updateQuantity(item.id, item.size, -1)} aria-label={`Decrease ${item.name} size ${item.size}`}><Icon name="minus" size={14} /></button><span>{item.quantity}</span><button onClick={() => updateQuantity(item.id, item.size, 1)} aria-label={`Increase ${item.name} size ${item.size}`} disabled={Number.isInteger(item.stockQuantity) && cart.filter((line) => line.id === item.id).reduce((total, line) => total + line.quantity, 0) >= item.stockQuantity}><Icon name="plus" size={14} /></button></div></div><button className="remove-button" onClick={() => updateQuantity(item.id, item.size, -item.quantity)}>Remove</button></div>)}</div><div className="cart-summary"><p><span>Subtotal</span><b>{money.format(subtotal)}</b></p><p className="total"><span>Total</span><b>{money.format(subtotal + shipping)}</b></p><button className="primary-button wide" onClick={openCheckout}>Secure checkout <Icon name="arrow" size={18} /></button><small><Icon name="shield" size={14} /> Delivery details first · sign in required before payment</small></div></> : <div className="cart-empty"><div className="empty-bag"><Icon name="bag" size={28} /></div><h3>Your cart is waiting.</h3><p>Add an essential to begin your ritual.</p><button className="primary-button" onClick={() => { setCartOpen(false); navigateTo("shop"); }}>Shop collection <Icon name="arrow" size={18} /></button></div>}</aside></>}
+    {productDetail && <><button className="modal-backdrop" onClick={() => setProductDetail(null)} aria-label="Close product details" /><div className="product-modal" role="dialog" aria-modal="true" aria-label={productDetail.name}><button className="icon-button close-modal" onClick={() => setProductDetail(null)} aria-label="Close product details"><Icon name="close" /></button><div className="modal-product-image" style={{ backgroundImage: `url(${productDetail.image})` }} /><div className="modal-product-panel"><div className="modal-product-copy"><p className="eyebrow">{productDetail.category}</p><h2>{productDetail.name}</h2><label className="product-size-choice">Choose a size<select value={selectedProductSize} onChange={(event) => setSelectedProductSize(event.target.value)}>{getProductSizePrices(productDetail).map((option) => <option key={option.size} value={option.size}>{option.size} · {money.format(Number(option.price))}</option>)}</select></label><p className="modal-price">{money.format(getPriceForProductSize(productDetail, selectedProductSize) ?? productDetail.price)} <span>· {selectedProductSize}</span></p><button className="account-text-action product-modal-wishlist" onClick={() => toggleWishlist(productDetail)}><Icon name={wishlist.includes(productDetail.id) ? "favorite" : "heart"} size={17} /> {wishlist.includes(productDetail.id) ? "Saved to wishlist" : "Save to wishlist"}</button><section className="product-guide" aria-label="Product guide"><h3>Product Guide</h3><details open><summary>Product Description</summary><p>{productDetail.description || "Product information is not available yet."}</p></details></section></div><div className="modal-product-actions"><button className="primary-button wide" onClick={() => { addToCart(productDetail, selectedProductSize); setProductDetail(null); setCartOpen(true); }} disabled={Number.isInteger(productDetail.stockQuantity) && productDetail.stockQuantity <= 0}>{Number.isInteger(productDetail.stockQuantity) && productDetail.stockQuantity <= 0 ? "Out of stock" : <>Add to cart <Icon name="bag" size={18} /></>}</button><p className="detail-note"><Icon name="shield" size={17} /> Thoughtfully formulated. Always cruelty-free.</p></div></div></div></>}
     {showCheckout && <Script src="https://js.paystack.co/v2/inline.js" strategy="afterInteractive" onReady={() => { setPaystackReady(true); setPaystackLoadFailed(false); }} onError={() => { setPaystackLoadFailed(true); setCheckoutError("Secure payment checkout could not load. Please refresh the page and try again."); }} />}
     {showCheckout && <><button className="modal-backdrop" onClick={() => setShowCheckout(false)} aria-label="Close checkout" /><section className="checkout-modal checkout-dialog" role="dialog" aria-modal="true" aria-labelledby="checkout-title"><button className="icon-button close-modal" onClick={() => setShowCheckout(false)} aria-label="Close checkout"><Icon name="close" /></button><header className="checkout-heading"><p className="eyebrow">Virtuous Matess Ventures</p><h2 id="checkout-title">Checkout</h2></header><div className="checkout-layout"><form className="checkout-form" onSubmit={completeCheckout}><div className="checkout-section-heading"><h3>Delivery details</h3><p>Where should we bring your finds?</p></div><label htmlFor="checkout-name">Full name<input id="checkout-name" required autoComplete="name" maxLength={120} value={checkoutDetails.customerName ?? customerSession?.user?.user_metadata?.full_name ?? ""} onChange={(event) => setCheckoutDetails({ ...checkoutDetails, customerName: event.target.value })} placeholder="Your full name" /></label><label htmlFor="checkout-email">Email address<input id="checkout-email" required autoComplete="email" type="email" maxLength={254} value={checkoutDetails.customerEmail || customerSession?.user?.email || ""} onChange={(event) => setCheckoutDetails({ ...checkoutDetails, customerEmail: event.target.value })} placeholder="you@example.com" /></label><label htmlFor="checkout-phone">Phone number<input id="checkout-phone" required autoComplete="tel" type="tel" minLength={7} maxLength={30} value={checkoutDetails.phone} onChange={(event) => setCheckoutDetails({ ...checkoutDetails, phone: event.target.value })} placeholder="e.g. 024 000 0000" /></label><label htmlFor="checkout-address">Delivery address<textarea id="checkout-address" required autoComplete="street-address" minLength={8} value={checkoutDetails.shippingAddress} onChange={(event) => setCheckoutDetails({ ...checkoutDetails, shippingAddress: event.target.value })} onBlur={() => saveDeliveryDetails(checkoutDetails.shippingAddress, checkoutDetails.city)} placeholder="House number, street, landmark" /></label><label htmlFor="checkout-city">City / town<input id="checkout-city" required autoComplete="address-level2" minLength={2} maxLength={120} value={checkoutDetails.city} onChange={(event) => setCheckoutDetails({ ...checkoutDetails, city: event.target.value })} onBlur={() => saveDeliveryDetails(checkoutDetails.shippingAddress, checkoutDetails.city)} placeholder="e.g. Accra" /></label>{checkoutError && <p className="form-error" role="alert">{checkoutError}</p>}<button className="primary-button wide" type="submit" disabled={orderSubmitting || !paystackReady}>{!paystackReady ? (paystackLoadFailed ? "Secure payment unavailable" : "Loading secure payment…") : orderSubmitting ? "Opening secure payment…" : "Place order"} <Icon name="arrow" size={18} /></button><small><Icon name="shield" size={14} /> Your total is confirmed securely by the server before payment.</small></form><aside className="checkout-summary"><div className="checkout-summary-heading"><h3>Order summary</h3><span>{cartCount} {cartCount === 1 ? "item" : "items"}</span></div><div className="checkout-summary-items">{cart.map((item) => <article className="checkout-summary-item" key={item.id}><span className="checkout-summary-image" style={{ backgroundImage: `url(${item.image})` }} role="img" aria-label={item.name} /><div><h4>{item.name}</h4><p>Qty {item.quantity}</p></div><strong>{money.format(item.price * item.quantity)}</strong></article>)}</div><div className="checkout-summary-totals"><p><span>Subtotal</span><b>{money.format(subtotal)}</b></p><p className="checkout-summary-total"><span>Total</span><b>{money.format(subtotal + shipping)}</b></p></div></aside></div></section></>}
   </main>;

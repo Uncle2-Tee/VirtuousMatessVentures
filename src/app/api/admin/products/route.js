@@ -58,10 +58,24 @@ export async function POST(request) {
   } catch {
     return NextResponse.json({ error: "Invalid product data." }, { status: 400 });
   }
+  if (!Array.isArray(product?.sizePrices) || product.sizePrices.length === 0) {
+    return NextResponse.json({ error: "Add at least one size with its own price." }, { status: 400 });
+  }
+  const sizePrices = product.sizePrices.map((option) => ({
+    size: typeof option?.size === "string" ? option.size.trim() : "",
+    price: Number(option?.price),
+  }));
+  const startingPrice = sizePrices.reduce((lowest, option) => Math.min(lowest, option.price), Number.POSITIVE_INFINITY);
+  product = {
+    ...product,
+    price: startingPrice,
+    size: sizePrices.map((option) => option.size).join(", "),
+    sizePrices,
+  };
   if (Number.isFinite(Number(product?.price)) && Number(product.price) > MAX_PRODUCT_PRICE) {
     return NextResponse.json({ error: `Price must not exceed GHS ${MAX_PRODUCT_PRICE.toLocaleString("en-GH", { minimumFractionDigits: 2 })}.` }, { status: 400 });
   }
-  if (!validProduct(product)) return NextResponse.json({ error: "Complete all required product fields with a valid price and stock quantity." }, { status: 400 });
+  if (!validProduct(product)) return NextResponse.json({ error: "Complete all required product fields with a valid size, price, and stock quantity for every option." }, { status: 400 });
 
   try {
     if (!(await withDatabaseRetry(() => isActiveCategory(product.category)))) {
@@ -114,7 +128,10 @@ export async function PATCH(request) {
   }
   if (Object.hasOwn(changes, "price")) {
     const price = Number(changes.price);
-    if (!Number.isFinite(price) || price <= 0) return NextResponse.json({ error: "Price must be greater than zero." }, { status: 400 });
+    if (!Number.isFinite(price) || price <= 0 || price > MAX_PRODUCT_PRICE
+      || Math.abs(price * 100 - Math.round(price * 100)) >= 1e-8) {
+      return NextResponse.json({ error: `Price must be between GHS 0.01 and GHS ${MAX_PRODUCT_PRICE.toLocaleString("en-GH", { minimumFractionDigits: 2 })}.` }, { status: 400 });
+    }
     update.price = price;
   }
   if (Object.hasOwn(changes, "stockQuantity")) {
@@ -144,6 +161,15 @@ export async function PATCH(request) {
   }
 
   try {
+    if (Object.hasOwn(update, "price")) {
+      const current = await prisma.product.findUnique({ where: { id }, select: { sizePrices: true } });
+      if (Array.isArray(current?.sizePrices) && current.sizePrices.length > 1) {
+        return NextResponse.json({ error: "This product has size-specific prices. Update its size options to change them." }, { status: 400 });
+      }
+      if (Array.isArray(current?.sizePrices) && current.sizePrices.length === 1) {
+        update.sizePrices = [{ ...current.sizePrices[0], price }];
+      }
+    }
     const saved = await prisma.product.update({ where: { id }, data: update });
     return NextResponse.json({ product: productFromDatabaseRow(saved) });
   } catch (error) {

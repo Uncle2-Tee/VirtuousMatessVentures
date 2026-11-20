@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAuthenticatedUser } from "../../../../lib/customer-auth";
 import { prisma } from "../../../../lib/prisma";
-import { productFromDatabaseRow } from "../../../../lib/products";
+import { getPriceForProductSize, productFromDatabaseRow } from "../../../../lib/products";
 
 export const runtime = "nodejs";
 
@@ -9,8 +9,9 @@ function validStoreData(cart, wishlist) {
   return Array.isArray(cart)
     && cart.length <= 20
     && cart.every((item) => item && typeof item.productId === "string" && item.productId.trim()
+      && (item.size === undefined || (typeof item.size === "string" && item.size.trim().length > 0 && item.size.length <= 100))
       && Number.isInteger(item.quantity) && item.quantity >= 1 && item.quantity <= 20)
-    && new Set(cart.map((item) => item.productId)).size === cart.length
+    && new Set(cart.map((item) => JSON.stringify([item.productId, item.size || ""]))).size === cart.length
     && Array.isArray(wishlist)
     && wishlist.length <= 100
     && wishlist.every((productId) => typeof productId === "string" && productId.trim())
@@ -40,7 +41,10 @@ export async function GET(request) {
     return NextResponse.json({
       cart: cart.flatMap((item) => {
         const product = products.get(item.productId);
-        return product ? [{ ...product, quantity: item.quantity }] : [];
+        if (!product) return [];
+        const size = item.size || product.size;
+        const price = getPriceForProductSize(product, size);
+        return price === null ? [] : [{ ...product, size, price, quantity: item.quantity }];
       }),
       wishlist,
     });
