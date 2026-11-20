@@ -66,11 +66,9 @@ function SaleReceiptCopy({ sale, headingId }) {
 
   return <div className="sales-receipt-content">
     <header className="sales-receipt-header">
-      <div className="sales-receipt-branding">
-        <BrandWordmark className="sales-receipt-logo" />
-        <div><p className="sales-eyebrow">Virtuous Matess Ventures</p><h2 id={headingId}>Sales receipt</h2></div>
-      </div>
-      <div className="sales-receipt-number"><span>Receipt</span><strong>#{receiptNumber}</strong></div>
+      <BrandWordmark className="sales-receipt-logo" />
+      <h2 id={headingId}>Sales receipt</h2>
+      <div className="sales-receipt-number"><span>Receipt number</span><strong>#{receiptNumber}</strong></div>
     </header>
     <div className="sales-receipt-meta">
       <div><span>Date &amp; time</span><time dateTime={sale.created_at}>{issuedAt}</time></div>
@@ -79,12 +77,10 @@ function SaleReceiptCopy({ sale, headingId }) {
     </div>
     <div className="sales-receipt-table-wrap">
       <table className="sales-receipt-table">
-        <thead><tr><th>Item</th><th className="sales-receipt-quantity">Qty</th><th className="sales-receipt-amount">Unit price</th><th className="sales-receipt-amount">Amount</th></tr></thead>
+        <thead><tr><th>Item</th><th className="sales-receipt-amount">Amount</th></tr></thead>
         <tbody>{sale.items.map((item, index) => (
           <tr key={`${item.product_id || item.name}-${index}`}>
-            <td>{item.name}{item.size ? <small>{item.size}</small> : null}</td>
-            <td className="sales-receipt-quantity">{quantityFormatter.format(item.quantity)}</td>
-            <td className="sales-receipt-amount">{money.format(Number(item.price))}</td>
+            <td><span className="sales-receipt-item-name">{item.name}</span>{item.size ? <small>{item.size}</small> : null}<span className="sales-receipt-item-calculation">{quantityFormatter.format(item.quantity)} × {money.format(Number(item.price))} each</span></td>
             <td className="sales-receipt-amount">{money.format(Number(item.line_total))}</td>
           </tr>
         ))}</tbody>

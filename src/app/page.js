@@ -623,12 +623,12 @@ export default function Home() {
           <span className="hero-heading-line">Style That</span><br />
           <span className="hero-heading-line">Defines You <span className="hero-brand-name"><span className="hero-brand-with">With</span> Virtuous Matess Ventures</span></span>
         </h1>
-        <p className="hero-text">Elevate your style with our curated collection of premium essentials. Thoughtful picks, unmatched quality.</p>
+        <p className="hero-text"></p>
         <div className="hero-actions">
           <button onClick={() => navigateTo("shop")} className="primary-button">Shop Now </button>
           <button onClick={() => navigateTo("categories")} className="secondary-button"><span aria-hidden="true">▷</span> View Lookbook</button>
         </div>
-        <div className="hero-benefits"><span><Icon name="help" size={15} /> 24/7 Support</span></div>
+        <div className="hero-benefits"><span></span></div>
       </div>
     </section>
     {activeView === "home" && <div
