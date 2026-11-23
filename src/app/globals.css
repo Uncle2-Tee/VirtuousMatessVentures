@@ -1394,6 +1394,10 @@ button,input,select,textarea { font:inherit; } button { cursor:pointer; touch-ac
   overflow:visible;
   padding-right:0;
   scrollbar-width:auto;
+  width:100%;
+  margin-right:auto;
+  margin-left:0;
+  justify-content:start;
 }
 
 .page-home {

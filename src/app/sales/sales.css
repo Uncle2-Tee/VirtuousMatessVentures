@@ -399,36 +399,35 @@
   .sales-receipt-table th,.sales-receipt-table td { padding-right:6px; padding-left:6px; }
 }
 @media print {
-  @page { size:80mm auto; margin:0; }
-  html,body { width:80mm; height:auto; min-height:0; margin:0; overflow:visible !important; background:#fff; }
-  .sales-shell { position:static; width:80mm; height:auto; min-height:0; overflow:visible; padding:0; background:#fff; }
+  @page { size:A4 portrait; margin:0; }
+  html,body { width:210mm; min-height:297mm; margin:0; overflow:visible !important; background:#fff; }
+  .sales-shell { position:static; width:210mm; min-height:297mm; overflow:visible; padding:0; background:#fff; }
   .sales-shell>* { display:none !important; }
-  .sales-shell>.sales-receipt-panel { position:static !important; display:block !important; width:80mm; height:auto; max-width:none; margin:0; padding:0; }
+  .sales-shell>.sales-receipt-panel { position:static !important; display:block !important; width:210mm; min-height:297mm; max-width:none; margin:0; padding:0; }
   .sales-receipt-panel>.sales-receipt-content,.sales-receipt-actions { display:none !important; }
-  .sales-receipt-print-sheet { width:80mm; height:auto; display:block; overflow:visible; }
-  .sales-receipt-print-copy { width:80mm; height:auto; min-height:0; overflow:visible; padding:3mm 4mm; }
-  .sales-receipt-print-copy .sales-receipt-content { width:100%; height:auto; overflow:visible; padding:0; border:0; border-radius:0; background:#fff; box-shadow:none; }
-  .sales-receipt-print-copy .sales-receipt-header { gap:1.5mm; padding-bottom:2.5mm; }
-  .sales-receipt-print-copy .sales-receipt-logo { width:36mm; }
-  .sales-receipt-print-copy .sales-receipt-logo .brand-wordmark-logo { max-height:18mm; }
-  .sales-receipt-print-copy .sales-receipt-header h2 { font-size:11pt; }
-  .sales-receipt-print-copy .sales-receipt-number { gap:.7mm; }
-  .sales-receipt-print-copy .sales-receipt-number span,.sales-receipt-print-copy .sales-receipt-meta span { font-size:6pt; }
-  .sales-receipt-print-copy .sales-receipt-number strong { font-size:8.5pt; }
-  .sales-receipt-print-copy .sales-receipt-meta { grid-template-columns:repeat(2,minmax(0,1fr)); gap:2mm 3mm; padding:2.5mm 0; }
-  .sales-receipt-print-copy .sales-receipt-meta>div:first-child { grid-column:1 / -1; }
-  .sales-receipt-print-copy .sales-receipt-meta time,.sales-receipt-print-copy .sales-receipt-meta strong { font-size:7pt; }
-  .sales-receipt-print-copy .sales-receipt-meta>div { gap:.7mm; }
+  .sales-receipt-print-sheet { width:210mm; min-height:297mm; display:block; overflow:visible; }
+  .sales-receipt-print-copy { width:210mm; min-height:297mm; overflow:visible; padding:18mm 20mm; }
+  .sales-receipt-print-copy .sales-receipt-content { width:100%; max-width:170mm; height:auto; margin:0 auto; overflow:visible; padding:0; border:0; border-radius:0; background:#fff; box-shadow:none; }
+  .sales-receipt-print-copy .sales-receipt-header { gap:2.5mm; padding-bottom:5mm; }
+  .sales-receipt-print-copy .sales-receipt-logo { width:48mm; }
+  .sales-receipt-print-copy .sales-receipt-logo .brand-wordmark-logo { max-height:24mm; }
+  .sales-receipt-print-copy .sales-receipt-header h2 { font-size:18pt; }
+  .sales-receipt-print-copy .sales-receipt-number { gap:1mm; }
+  .sales-receipt-print-copy .sales-receipt-number span,.sales-receipt-print-copy .sales-receipt-meta span { font-size:8pt; }
+  .sales-receipt-print-copy .sales-receipt-number strong { font-size:12pt; }
+  .sales-receipt-print-copy .sales-receipt-meta { grid-template-columns:repeat(3,minmax(0,1fr)); gap:5mm; padding:5mm 0; }
+  .sales-receipt-print-copy .sales-receipt-meta time,.sales-receipt-print-copy .sales-receipt-meta strong { font-size:10pt; }
+  .sales-receipt-print-copy .sales-receipt-meta>div { gap:1mm; }
   .sales-receipt-print-copy .sales-receipt-table-wrap { overflow:visible; }
-  .sales-receipt-print-copy .sales-receipt-table .sales-receipt-amount { width:20mm; }
-  .sales-receipt-print-copy .sales-receipt-table th { padding:1.4mm 1mm; border-top:1px solid #444; border-bottom:1px solid #444; color:#222; font-size:6.5pt; }
-  .sales-receipt-print-copy .sales-receipt-table td { padding:1.5mm 1mm; font-size:8pt; line-height:1.2; }
+  .sales-receipt-print-copy .sales-receipt-table .sales-receipt-amount { width:35mm; }
+  .sales-receipt-print-copy .sales-receipt-table th { padding:3mm 2mm; border-top:1px solid #444; border-bottom:1px solid #444; color:#222; font-size:8pt; }
+  .sales-receipt-print-copy .sales-receipt-table td { padding:3.5mm 2mm; font-size:10pt; line-height:1.35; }
   .sales-receipt-print-copy .sales-receipt-table td:first-child { overflow-wrap:anywhere; }
-  .sales-receipt-print-copy .sales-receipt-table td small,.sales-receipt-print-copy .sales-receipt-item-calculation { margin-top:.6mm; font-size:7pt; }
-  .sales-receipt-print-copy .sales-receipt-total { margin-top:1mm; padding:2.5mm 1mm; border-top:1px dashed #444; border-bottom:2px solid #222; }
-  .sales-receipt-print-copy .sales-receipt-total span { color:#222; font-size:7pt; }
-  .sales-receipt-print-copy .sales-receipt-total strong { font-size:13pt; font-weight:700; }
-  .sales-receipt-print-copy .sales-receipt-thanks { margin:2.5mm 0 0; color:#222; font-size:7.5pt; }
+  .sales-receipt-print-copy .sales-receipt-table td small,.sales-receipt-print-copy .sales-receipt-item-calculation { margin-top:1mm; font-size:8pt; }
+  .sales-receipt-print-copy .sales-receipt-total { margin-top:2mm; padding:5mm 2mm; border-top:1px dashed #444; border-bottom:2px solid #222; }
+  .sales-receipt-print-copy .sales-receipt-total span { color:#222; font-size:9pt; }
+  .sales-receipt-print-copy .sales-receipt-total strong { font-size:18pt; font-weight:700; }
+  .sales-receipt-print-copy .sales-receipt-thanks { margin:5mm 0 0; color:#222; font-size:10pt; }
   .sales-receipt-table tr { break-inside:avoid; }
   .sales-receipt-logo,.sales-receipt-logo * { -webkit-print-color-adjust:exact; print-color-adjust:exact; }
 }
